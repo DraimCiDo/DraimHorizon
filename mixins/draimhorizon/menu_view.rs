@@ -333,7 +333,10 @@ pub(super) fn render(game: &Game<'_>, batch: &mut HudBatch, screen: &NativeScree
                 continue;
             }
             if widget.control == Some(model::Control::Language)
-                || matches!(widget.control, Some(model::Control::SettingsTab(_)))
+                || matches!(
+                    widget.control,
+                    Some(model::Control::SettingsTab(_) | model::Control::ExperimentalTab(_))
+                )
             {
                 let text = ui::clip(game, &widget.text, w - 6.0);
                 ui::text(
@@ -457,6 +460,14 @@ pub(super) fn render(game: &Game<'_>, batch: &mut HudBatch, screen: &NativeScree
                     w -= 14.0;
                 }
             }
+            if hover
+                && matches!(
+                    widget.control,
+                    Some(model::Control::NavigationWaypoint | model::Control::NavigationPlayer)
+                )
+            {
+                request_tip = Some(widget.text.clone());
+            }
             let color = if widget.muted {
                 0x8995a5
             } else if widget.selected {
@@ -478,6 +489,7 @@ pub(super) fn render(game: &Game<'_>, batch: &mut HudBatch, screen: &NativeScree
                         s.menu.text()[..cursor].to_owned()
                     };
                     let (ru, en) = match s.menu.focus {
+                        Some(model::Field::NavigationCoordinates) => ("XYZ: ", "XYZ: "),
                         Some(model::Field::ClaimOwner) => ("Игрок: ", "Player: "),
                         Some(model::Field::Name) => ("Имя: ", "Name: "),
                         Some(model::Field::Color | model::Field::PriorityColor) => {
