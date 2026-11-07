@@ -75,6 +75,26 @@ impl TargetLanguage {
     pub fn needs_translation(self, text: &str) -> bool {
         needs_translation(text)
     }
+    /// Whether `text` is worth sending to a provider for translation into `self`.
+    ///
+    /// A line already in the target language must never go out: providers rewrite it slightly
+    /// ("im at spawn" becomes "I'm at spawn") and the chat would show that as a translation.
+    /// An explicit source language is trusted. With automatic detection, a line the local
+    /// detector identifies as the target is skipped, and plain-ASCII text it cannot identify
+    /// is treated as English when translating into English (the behaviour before language
+    /// selection existed: only text with non-English markers was sent).
+    pub fn should_translate(self, source: Option<TargetLanguage>, text: &str) -> bool {
+        if !needs_translation(text) {
+            return false;
+        }
+        if let Some(source) = source {
+            return source != self;
+        }
+        match super::detect_source_language(text) {
+            Some(code) => code != self.source_code(),
+            None => !(self == Self::English && text.is_ascii()),
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SourcePolicy {
