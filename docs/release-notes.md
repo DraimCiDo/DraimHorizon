@@ -1,10 +1,8 @@
-**DraimHorizon 0.25.0** for official Horizon Nightly 2026-11-07 - 6560641 (Java 26.3).
+**DraimHorizon 0.25.1** for official Horizon Nightly 2026-11-07 - 6560641 (Java 26.3).
 
-**Upgrade requires a reinstall:** remove `claim_borders` in Horizon Launcher, install `https://github.com/DraimCiDo/DraimHorizon` again, then rebuild native mods. The new bundle ID is `draimhorizon`; the launcher cannot update the old ID into the new one. Do not keep both versions installed. Keep the data folder: settings, waypoints, friends and history reuse `claim_borders`. Reapply custom key bindings and activation preferences if needed.
+- Chat translation no longer touches messages that are already in the target language. Translating into English, lines such as `im at spawn` or `so guys, in a couple of moments I'll go to bed` were sent to the provider and shown back slightly rewritten (`I'm at spawn`). They are now skipped before sending when the local detector identifies the target language, or when plain-ASCII text cannot be identified and the target is English, as before language selection existed.
+- A provider result is discarded when the provider reports the text was already in the target language, or when only case, spacing or punctuation changed.
+- An explicit **Input** / **Chat from** language is trusted, except that a source equal to the target is never translated. With a non-Latin source such as Russian, text containing none of that script (for example `yea i know`) is left alone instead of being forced through the provider as Russian and rewritten.
+- Outgoing messages use the same rule, so an unnecessary translation no longer ends with a "service unavailable" notice.
 
-- Single-line presence cards with official Lucide + / minus marks before player names.
-- Green joins, red leaves; cyan joins and lavender leaves for friends and important players.
-- Settings > Chat > Notifications > Presence view switches between Icon and name and the localized Text view.
-- Includes PR #11 with the identity/storage separation, checked against the official Nightly rather than main.
-
-The shared DeepL service requirements from 0.24.0 are unchanged (service 1.3.0 for all new language/source settings).
+Update by reinstalling from GitHub in Horizon Launcher and rebuild native mods.
