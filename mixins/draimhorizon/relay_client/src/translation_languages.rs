@@ -75,6 +75,25 @@ impl TargetLanguage {
     pub fn needs_translation(self, text: &str) -> bool {
         needs_translation(text)
     }
+    /// Whether `text` contains letters of this language's script. Latin-script languages
+    /// cannot be told apart by script, so they always answer true.
+    pub fn has_own_script_in(self, text: &str) -> bool {
+        let ranges: &[(char, char)] = match self {
+            Self::Russian | Self::Ukrainian => &[('\u{0400}', '\u{052f}')],
+            Self::Arabic => &[('\u{0600}', '\u{06ff}'), ('\u{0750}', '\u{077f}')],
+            Self::Hindi => &[('\u{0900}', '\u{097f}')],
+            Self::Japanese => &[
+                ('\u{3040}', '\u{30ff}'),
+                ('\u{4e00}', '\u{9fff}'),
+                ('\u{ff66}', '\u{ff9f}'),
+            ],
+            Self::Korean => &[('\u{ac00}', '\u{d7af}'), ('\u{1100}', '\u{11ff}')],
+            Self::Chinese => &[('\u{4e00}', '\u{9fff}')],
+            _ => return true,
+        };
+        text.chars()
+            .any(|c| ranges.iter().any(|(from, to)| (*from..=*to).contains(&c)))
+    }
     /// Whether `text` is worth sending to a provider for translation into `self`.
     ///
     /// A line already in the target language must never go out: providers rewrite it slightly
@@ -88,7 +107,10 @@ impl TargetLanguage {
             return false;
         }
         if let Some(source) = source {
-            return source != self;
+            // An explicit source is trusted, but a provider forced to read English as Russian
+            // still "corrects" it ("yea i know" -> "yeah i know"). Text with none of the
+            // source language's letters is not in that language, so it is left alone.
+            return source != self && source.has_own_script_in(text);
         }
         match super::detect_source_language(text) {
             Some(code) => code != self.source_code(),

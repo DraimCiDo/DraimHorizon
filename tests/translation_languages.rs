@@ -274,3 +274,27 @@ fn text_already_in_the_target_language_is_never_sent_or_shown_as_a_translation()
     };
     assert!(!real.is_noop("где база", en));
 }
+
+#[test]
+fn explicit_non_latin_source_leaves_text_in_other_scripts_alone() {
+    let en = TargetLanguage::English;
+    let ru = Some(TargetLanguage::Russian);
+    // Reported live: with Chat from = Russian, "yea i know" came back as "yeah i know".
+    for text in [
+        "yea i know",
+        "im at spawn",
+        "how can I make it private?",
+        "lol",
+    ] {
+        assert!(!en.should_translate(ru, text), "{text}");
+    }
+    // Russian and mixed lines are still translated.
+    for text in ["куда на моей территорке", "claim команда", "где спавн?"]
+    {
+        assert!(en.should_translate(ru, text), "{text}");
+    }
+    // Latin-script sources cannot be told apart by script and stay trusted.
+    assert!(en.should_translate(Some(TargetLanguage::Finnish), "hei kaikki"));
+    assert!(en.should_translate(Some(TargetLanguage::Japanese), "こんにちは"));
+    assert!(!en.should_translate(Some(TargetLanguage::Japanese), "hello"));
+}
