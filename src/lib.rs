@@ -332,3 +332,20 @@ pub mod baritone_pathing_behavior;
 #[allow(clippy::all, dead_code, unused_mut)]
 #[path = "../mixins/draimhorizon/baritone/tests_pathing.rs"]
 mod baritone_tests_pathing;
+
+#[path = "../mixins/draimhorizon/diorama/bake.rs"]
+pub mod diorama_bake;
+#[path = "../mixins/draimhorizon/diorama/cave.rs"]
+pub mod diorama_cave;
+#[path = "../mixins/draimhorizon/diorama/layout.rs"]
+pub mod diorama_layout;
+#[path = "../mixins/draimhorizon/diorama/looks.rs"]
+pub mod diorama_looks;
+#[path = "../mixins/draimhorizon/diorama/mosaic.rs"]
+pub mod diorama_mosaic;
+#[path = "../mixins/draimhorizon/diorama/paint.rs"]
+pub mod diorama_paint;
+#[path = "../mixins/draimhorizon/diorama/projection.rs"]
+pub mod diorama_projection;
+#[path = "../mixins/draimhorizon/diorama/style.rs"]
+pub mod diorama_style;

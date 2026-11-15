@@ -1,8 +1,7 @@
-**DraimHorizon 0.40.6 - Ores experiment: live portal highlight and icons**
+**DraimHorizon 0.40.7 - Diorama map core**
 
 Target: official Horizon Nightly source `9f42064` (unchanged).
 
-- The highlight reads all loaded chunks in range and keeps its marks while the next scan runs, so it follows you while flying. Chests, Ender chests and portals are capped so chests cannot hide portals.
-- The Chests, Ender chest, End portal and Nether portal tiles show a chest, an Ender chest, a portal frame and obsidian.
+- Adds the pure core of the Diorama angled map (projection, style, block looks, column painter, cave slice, chunk mosaic) under `mixins/draimhorizon/diorama/`, MIT, with the original authors' license and a NOTICE. It is not used by the minimap or the M map yet, so nothing changes in game; the next steps wire it in.
 
-Verification: Clippy with warnings denied, cargo fmt and the workspace tests pass. A running game and the native client build were not checked.
+Verification: Clippy with warnings denied, cargo fmt and the workspace tests pass (the core's 66 tests included). The pinned native client was staged and `cargo check`ed against Nightly 9f42064 with the new modules. A running game was not checked.

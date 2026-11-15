@@ -21,6 +21,8 @@ LICENSE_FILES = {
     "baritone/COPYING",
     "baritone/LICENSE-Part-2.jpg",
     "baritone/NOTICE.md",
+    "diorama/LICENSE",
+    "diorama/NOTICE.md",
     "litematica/LICENSE",
     "litematica/NOTICE.md",
 }

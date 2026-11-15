@@ -1,5 +1,9 @@
 # История версий
 
+## 0.40.7
+
+- Diorama map, step 1: the pure core of the angled (oblique, 50 degrees, north-facing) map of Diorama by Dara Adedeji is added under `mixins/draimhorizon/diorama/`, taken with its authorship from the unofficial Horizon port by Worrcc (MIT, see `NOTICE.md` there; both licenses stay with the bundle): projection, style (sun, sky, height shade, grade, outlines), block-look table, the column painter that draws top and south faces, cave and Nether slices, and the mosaic of baked chunks. Not taken: the port's WASM glue, which needs the Horizon-iOS fork's mod API. Nothing is wired into the minimap or the M map yet, so the maps look as before; the next steps connect loaded chunks and resource-pack textures to it and draw it in both maps. The core's own 66 tests run with ours.
+
 ## 0.40.6
 
 - Ores experiment: the highlight now reads every loaded chunk within its 128-block range (it read only the 3x3 chunks around the player), and moving to another chunk keeps the old marks until the new scan arrives instead of clearing them, so portals ahead appear and stay while flying. Chests, Ender chests and portals are capped at 64 marks each so a base full of chests cannot hide a portal.

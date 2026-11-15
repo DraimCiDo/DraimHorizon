@@ -1,6 +1,6 @@
 [mod]
 id = "draimhorizon"
-version = "0.40.6"
+version = "0.40.7"
 priority = 100
 
 # Additional visible models only: server metadata and effects remain untouched.
@@ -1361,6 +1361,55 @@ bindings = [
   { name = "value", ty = "bool", value = "$value" },
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
 ]
+
+# Diorama minimap core (MIT), see diorama/NOTICE.md.
+[[module]]
+id = "dio-mod_projection"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_projection"
+source = "diorama/projection.rs"
+
+[[module]]
+id = "dio-mod_style"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_style"
+source = "diorama/style.rs"
+
+[[module]]
+id = "dio-mod_looks"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_looks"
+source = "diorama/looks.rs"
+
+[[module]]
+id = "dio-mod_bake"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_bake"
+source = "diorama/bake.rs"
+
+[[module]]
+id = "dio-mod_cave"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_cave"
+source = "diorama/cave.rs"
+
+[[module]]
+id = "dio-mod_layout"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_layout"
+source = "diorama/layout.rs"
+
+[[module]]
+id = "dio-mod_paint"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_paint"
+source = "diorama/paint.rs"
+
+[[module]]
+id = "dio-mod_mosaic"
+file = "crates/horizon-client/src/game.rs"
+name = "diorama_mosaic"
+source = "diorama/mosaic.rs"
 
 # Baritone navigation (LGPL-3.0), see baritone/NOTICE.md.
 [[module]]
