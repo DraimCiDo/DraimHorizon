@@ -1,5 +1,9 @@
 # История версий
 
+## 0.40.9
+
+- Diorama map, step 3 (light): the 3D minimap now has **sun shadows** and **corner occlusion**, which the core did not draw. For every column the mod walks toward the sun (38 degrees up, from the west-south-west) over the heights of its own and the neighbouring chunks, and a taller block in the way darkens the face, softly with how far above the ray it stands; the eight neighbours that rise above a block close it in and dim its ambient light. A chunk read before its neighbours were known is read again once they are, so shadows do not break at chunk edges. Columns, not Diorama's per-pixel rays, so the shadows are blocky.
+
 ## 0.40.8
 
 - Diorama map, step 2 (minimap): a **Map view: 3D / flat** switch in J → Claims → Map settings (off by default, saved with the map settings). In 3D the minimap is drawn by the Diorama core from the loaded chunks: the angled 50 degree view with top and south faces, the game's own block textures averaged per face from the loaded resource packs (grass, leaves and water tinted by the biome), Diorama's light, height shade, colour grade and outlines. The block looks are built once on a worker thread and rebuilt when the resource packs reload; chunks are read nearest first inside a time budget of about a millisecond a frame, near chunks again every 0.8 s so edits show, and the picture is painted a few rows at a time. Player and waypoint marks are placed with the angled projection (at the player's height). It applies to the surface view; cave views and the flat setting use the old map, and zoom is limited to 3 blocks per pixel in 3D. The M map and saved explored terrain are still flat; they come next.

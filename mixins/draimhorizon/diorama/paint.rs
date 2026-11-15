@@ -121,12 +121,14 @@ impl Painter {
                 look.emission,
                 top,
             ),
-            None => self.style.surface_light_at(
+            None => self.style.surface_light_shaded(
                 self.side_lambert,
                 top,
                 y,
                 chunk.sky_at(col),
                 look.emission,
+                chunk.sun_at(col),
+                if top { chunk.ao_at(col) } else { 1.0 },
             ),
         };
         let mut out = mul(a, light);

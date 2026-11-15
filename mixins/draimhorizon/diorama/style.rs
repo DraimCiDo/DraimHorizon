@@ -175,9 +175,25 @@ impl Style {
         sky: f32,
         emission: f32,
     ) -> [f32; 3] {
+        self.surface_light_shaded(side_lambert, top, y, sky, emission, 1.0, 1.0)
+    }
+
+    /// [`Style::surface_light_at`] with the share of sun that reaches the
+    /// face and how open it is to ambient light (corner occlusion).
+    #[allow(clippy::too_many_arguments)]
+    pub fn surface_light_shaded(
+        &self,
+        side_lambert: f64,
+        top: bool,
+        y: f64,
+        sky: f32,
+        emission: f32,
+        sun: f32,
+        open: f32,
+    ) -> [f32; 3] {
         let lambert = if top { 1.0 } else { side_lambert };
-        let direct = (f64::from(self.sun_strength) * lambert) as f32;
-        let mut ambient = self.ambient;
+        let direct = (f64::from(self.sun_strength) * lambert) as f32 * sun;
+        let mut ambient = self.ambient * open;
         if self.sky_occlusion > 0.0 {
             ambient *= 1.0 - self.sky_occlusion * (1.0 - (0.15 + 0.85 * sky));
         }

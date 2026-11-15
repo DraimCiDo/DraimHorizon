@@ -47,6 +47,11 @@ pub struct Chunk {
     /// What plants and glass above the top lay over it, per column (linear
     /// r, g, b and the share let through); empty: none anywhere.
     pub over: Vec<[f32; 4]>,
+    /// Per column, how much sun reaches its top, 0..255; empty: all of it.
+    pub sun: Vec<u8>,
+    /// Per column, how open its top is to the sky's ambient light, 0..255;
+    /// empty: fully open.
+    pub ao: Vec<u8>,
 }
 
 /// [`Chunk::over`] for a column with nothing over it.
@@ -64,6 +69,8 @@ impl Chunk {
             light: Vec::new(),
             tints: Vec::new(),
             over: Vec::new(),
+            sun: Vec::new(),
+            ao: Vec::new(),
         }
     }
     /// A chunk from a function of the local column `(x, z)`: its top block's y
@@ -119,6 +126,14 @@ impl Chunk {
             Some(t) => [t[0], t[1], t[2]],
             None => [0xFF_FFFF; 3],
         }
+    }
+    /// The share of sun reaching column `i`, 0..1.
+    pub fn sun_at(&self, i: usize) -> f32 {
+        self.sun.get(i).map_or(1.0, |&v| f32::from(v) / 255.0)
+    }
+    /// How open column `i` is to ambient light, 0..1.
+    pub fn ao_at(&self, i: usize) -> f32 {
+        self.ao.get(i).map_or(1.0, |&v| f32::from(v) / 255.0)
     }
     /// What lies over column `i`'s top.
     pub fn over_at(&self, i: usize) -> [f32; 4] {

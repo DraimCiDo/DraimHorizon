@@ -35,6 +35,10 @@ struct State {
     scope: String,
     /// When each chunk was read and a fingerprint of what was read.
     fed: BTreeMap<(i32, i32), (Instant, u64)>,
+    /// The top heights of every chunk read, for sun shadows and corner occlusion across chunk edges.
+    heights: BTreeMap<(i32, i32), Vec<i16>>,
+    /// Chunks read before all their neighbours were known: read again once they are.
+    partial: std::collections::BTreeSet<(i32, i32)>,
 }
 
 fn new_mosaic() -> mosaic::Mosaic {
@@ -52,6 +56,8 @@ fn state<T>(f: impl FnOnce(&mut State) -> T) -> T {
                 mosaic: new_mosaic(),
                 scope: String::new(),
                 fed: BTreeMap::new(),
+                heights: BTreeMap::new(),
+                partial: Default::default(),
             })
         })
         .lock()
@@ -94,6 +100,8 @@ pub(super) fn reset() {
     state(|s| {
         s.scope.clear();
         s.fed.clear();
+        s.heights.clear();
+        s.partial.clear();
         s.mosaic.clear();
     });
 }
@@ -290,6 +298,8 @@ pub(super) fn minimap(
             s.painter = None;
             s.task = None;
             s.fed.clear();
+            s.heights.clear();
+            s.partial.clear();
             s.mosaic.clear();
         }
         if s.task.as_ref().is_some_and(|(_, t)| t.is_finished()) {
@@ -299,6 +309,8 @@ pub(super) fn minimap(
             {
                 s.painter = Some(painter);
                 s.fed.clear();
+                s.heights.clear();
+                s.partial.clear();
                 s.mosaic.clear();
             }
         }
@@ -319,6 +331,8 @@ pub(super) fn minimap(
         if s.scope != scope {
             s.scope = scope.to_owned();
             s.fed.clear();
+            s.heights.clear();
+            s.partial.clear();
             s.mosaic.clear();
         }
         let painter = s.painter.take().unwrap();
@@ -346,12 +360,18 @@ pub(super) fn minimap(
         let started = Instant::now();
         for at in wanted {
             let near = (at.0 - pcx).abs().max((at.1 - pcz).abs()) <= 2;
+            let healed = s.partial.contains(&at)
+                && s.heights.contains_key(&(at.0 + 1, at.1))
+                && s.heights.contains_key(&(at.0 - 1, at.1))
+                && s.heights.contains_key(&(at.0, at.1 + 1))
+                && s.heights.contains_key(&(at.0, at.1 - 1));
             let due = match s.fed.get(&at) {
                 None => true,
+                Some(_) if healed => true,
                 Some((t, _)) => t.elapsed() >= if near { NEAR_REFRESH } else { REFRESH },
             };
             // Far chunks are read once; only the neighbourhood is read again.
-            if !due || (s.fed.contains_key(&at) && !near) {
+            if !due || (s.fed.contains_key(&at) && !near && !healed) {
                 continue;
             }
             if started.elapsed() >= READ_BUDGET {
@@ -360,7 +380,14 @@ pub(super) fn minimap(
             let Some(chunk) = game.world.chunks.get(&at) else {
                 continue;
             };
-            let read = read_chunk(game, &painter, at, chunk);
+            let mut read = read_chunk(game, &painter, at, chunk);
+            s.heights.insert(at, read.tops.clone());
+            let complete = shade(&mut read, at, &s.heights);
+            if complete {
+                s.partial.remove(&at);
+            } else {
+                s.partial.insert(at);
+            }
             let print = fingerprint(&read);
             if s.fed.get(&at).is_none_or(|(_, old)| *old != print) {
                 s.mosaic.set_chunk(at, Some(read));
@@ -368,6 +395,9 @@ pub(super) fn minimap(
             s.fed.insert(at, (Instant::now(), print));
         }
         s.mosaic.forget_far((pcx, pcz), radius + 4);
+        s.heights
+            .retain(|&(x, z), _| (x - pcx).abs() <= radius + 5 && (z - pcz).abs() <= radius + 5);
+        s.partial.retain(|k| s.fed.contains_key(k));
         s.fed
             .retain(|&(x, z), _| (x - pcx).abs() <= radius + 4 && (z - pcz).abs() <= radius + 4);
 
@@ -408,5 +438,80 @@ fn fingerprint(chunk: &bake::Chunk) -> u64 {
     chunk.tops.iter().for_each(|&t| mix(t as u16 as u64));
     chunk.states.iter().for_each(|&t| mix(u64::from(t)));
     chunk.water.iter().for_each(|&t| mix(u64::from(t)));
+    chunk.sun.iter().for_each(|&t| mix(u64::from(t)));
+    chunk.ao.iter().for_each(|&t| mix(u64::from(t)));
     h
+}
+
+/// Sun shadow and corner occlusion for every column of `chunk`, from the tops of it and its
+/// neighbours (blocks away from the known chunks count as level ground). Returns whether all four
+/// edge neighbours were known.
+fn shade(
+    chunk: &mut bake::Chunk,
+    at: (i32, i32),
+    heights: &BTreeMap<(i32, i32), Vec<i16>>,
+) -> bool {
+    let (sx, sy, sz) = style::DEFAULT.sun();
+    let horizontal = (sx * sx + sz * sz).sqrt();
+    // Blocks the sun ray climbs per block walked toward it.
+    let slope = sy / horizontal;
+    let (dx, dz) = (sx / horizontal, sz / horizontal);
+    let height = |x: i32, z: i32| -> Option<i32> {
+        let key = (x.div_euclid(16), z.div_euclid(16));
+        let tops = heights.get(&key)?;
+        let t = tops[(z.rem_euclid(16) * 16 + x.rem_euclid(16)) as usize];
+        (t != bake::NO_TOP).then_some(i32::from(t))
+    };
+    let mut sun = vec![255u8; 256];
+    let mut ao = vec![255u8; 256];
+    for lz in 0..16i32 {
+        for lx in 0..16i32 {
+            let i = (lz * 16 + lx) as usize;
+            let (x, z) = (at.0 * 16 + lx, at.1 * 16 + lz);
+            let Some(h) = height(x, z) else { continue };
+            let top = f64::from(h) + 1.0;
+            // Sun: walk toward it; a block whose top is above the ray shades this one. The shade
+            // softens with how far above and how far away the blocker is.
+            let mut lit = 1.0f64;
+            for step in 1..=28 {
+                let d = f64::from(step);
+                let (wx, wz) = (
+                    (f64::from(x) + 0.5 + dx * d).floor() as i32,
+                    (f64::from(z) + 0.5 + dz * d).floor() as i32,
+                );
+                let Some(n) = height(wx, wz) else { continue };
+                let over = f64::from(n) + 1.0 - (top + slope * d);
+                if over > 0.0 {
+                    lit = lit.min(1.0 - (over / 1.5).min(1.0));
+                    if lit <= 0.0 {
+                        break;
+                    }
+                }
+            }
+            sun[i] = (lit * 255.0).round() as u8;
+            // Corner occlusion: the eight neighbours standing above this block close it in.
+            let mut closed = 0.0f64;
+            for (ox, oz) in [
+                (-1, -1),
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ] {
+                let n = height(x + ox, z + oz).unwrap_or(h);
+                let rise = f64::from(n - h).clamp(0.0, 3.0) / 3.0;
+                closed += rise * if ox != 0 && oz != 0 { 0.7 } else { 1.0 };
+            }
+            let open = 1.0 - 0.5 * (closed / 6.0).min(1.0);
+            ao[i] = (open * 255.0).round() as u8;
+        }
+    }
+    chunk.sun = sun;
+    chunk.ao = ao;
+    [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .iter()
+        .all(|&(a, b)| heights.contains_key(&(at.0 + a, at.1 + b)))
 }

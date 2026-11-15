@@ -1,3 +1,11 @@
+**DraimHorizon 0.40.9 - 3D minimap: shadows and occlusion**
+
+Target: official Horizon Nightly source `9f42064` (unchanged).
+
+- The 3D minimap now casts sun shadows (hills, trees and buildings shade what is behind them) and darkens block corners and pits, as Diorama does. Shadows are per block column, so they are coarser than Diorama's own.
+
+Verification: Clippy with warnings denied, cargo fmt and the workspace tests pass. Not checked in a running game.
+
 **DraimHorizon 0.40.8 - 3D minimap (Diorama), step 2**
 
 Target: official Horizon Nightly source `9f42064` (unchanged).
