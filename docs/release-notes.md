@@ -1,3 +1,12 @@
+**DraimHorizon 0.40.11 - 3D world map, sharper minimap**
+
+Target: official Horizon Nightly source `9f42064` (unchanged).
+
+- The M map has a **Map view: 3D / flat** button. In 3D, the terrain around you (up to about 380 blocks across) is drawn at an angle like the minimap; farther saved terrain stays flat. Marks follow the angled view.
+- The 3D minimap is sharpened: edges and outlines are crisper.
+
+Verification: Clippy with warnings denied, cargo fmt and the workspace tests pass. Not checked in a running game.
+
 **DraimHorizon 0.40.10 - 3D minimap: sharper picture**
 
 Target: official Horizon Nightly source `9f42064` (unchanged).

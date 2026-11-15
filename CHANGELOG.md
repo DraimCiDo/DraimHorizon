@@ -1,5 +1,10 @@
 # История версий
 
+## 0.40.11
+
+- Diorama map, step 4 (world map): the **M map** now shows the angled 3D view over the terrain around the player when **Map view: 3D** is on, with a new **Map view: 3D / flat** button in its toolbar (the same setting as in J → Claims). Where the loaded chunks have been painted by the mosaic the angled picture replaces the flat one; saved terrain further away, other dimensions, cave views and views wider than about 380 blocks (zoom out) stay flat. Waypoint, player and mob marks follow the angled projection. This version keeps the earlier shadows.
+- The 3D minimap got an unsharp mask over its 128 px picture: the 2 x 2 averaging made it soft ("мыльная"), the mask restores edges and outlines.
+
 ## 0.40.10
 
 - 3D minimap sharpness: the host's minimap picture is a fixed 128 x 128 sprite, so the 3D view was picked texel by texel and looked pixelated. The mosaic now holds four texels per block (was two) and each pixel averages 2 x 2 samples of it, which smooths edges, outlines and textures. The 3D view spans up to 384 blocks, so its widest zoom is 2.5 blocks per pixel (was 3).

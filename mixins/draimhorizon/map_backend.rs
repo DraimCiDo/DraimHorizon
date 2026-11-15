@@ -392,7 +392,24 @@ pub(in crate::game) fn update(game: &mut Game<'_>) -> bool {
                 blocks_per_pixel: image.query.render.bpp as f32,
             };
             let aspect = image.query.render.aspect as f32;
-            let pixels = image.pixels;
+            let mut pixels = image.pixels;
+            if request.preferences.view3d
+                && matches!(scan_layer, Layer::Surface)
+                && image.query.context.dimension == request.source.dimension
+            {
+                crate::game::claim_borders_diorama_view::overlay(
+                    game,
+                    &format!("{}|{}", request.source.scope, request.dimension),
+                    actual.center,
+                    request.source.player[1],
+                    f64::from(actual.blocks_per_pixel),
+                    f64::from(aspect),
+                    size,
+                    &mut pixels,
+                );
+            } else {
+                crate::game::claim_borders_diorama_view::reset_full();
+            }
             if let Some(rect) = game
                 .gui
                 .atlas

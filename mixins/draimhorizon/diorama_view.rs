@@ -67,6 +67,7 @@ fn state<T>(f: impl FnOnce(&mut State) -> T) -> T {
     f(&mut s)
 }
 
+static FULL_SHOWING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static SHOWING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Whether the last minimap frame was the angled view (marks then use its projection).
@@ -89,6 +90,31 @@ pub(super) fn mark_point(
     ]
 }
 
+/// Whether the world map's last picture had the angled view laid over it.
+pub(super) fn full_showing() -> bool {
+    FULL_SHOWING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// [`mark_point`] for the world map: `aspect` wide, any blocks per pixel.
+pub(super) fn mark_point_full(
+    view_centre: [f64; 2],
+    blocks_per_pixel: f32,
+    aspect: f32,
+    world: [f64; 2],
+) -> [f32; 2] {
+    let bpp = f64::from(blocks_per_pixel);
+    let sin = style::DEFAULT.pitch_degrees.to_radians().sin();
+    [
+        (64.0 + (world[0] - view_centre[0]) / bpp / f64::from(aspect)) as f32,
+        (64.0 + (world[1] - view_centre[1]) * sin / bpp) as f32,
+    ]
+}
+
+/// The world map is showing the flat picture again.
+pub(super) fn reset_full() {
+    FULL_SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Drops the angled picture's state the first time the flat view is shown again.
 pub(super) fn reset_if_showing() {
     if SHOWING.swap(false, std::sync::atomic::Ordering::Relaxed) {
@@ -99,6 +125,7 @@ pub(super) fn reset_if_showing() {
 /// Forgets everything painted (leaving the world, or the 3D view being switched off).
 pub(super) fn reset() {
     SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
+    FULL_SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
     state(|s| {
         s.scope.clear();
         s.fed.clear();
@@ -282,17 +309,18 @@ fn read_chunk(
     out
 }
 
-/// The minimap's pixels (`size` x `size`, RGBA) in the angled view around `centre` (block x, z) at
-/// the player's height `y`, or none while the block looks are still being built.
-pub(super) fn minimap(
+/// Feeds the loaded chunks around `centre` (block x, z) to the mosaic, within the time budget,
+/// recentres it on the player's height `y`, and calls `sample` with the mosaic, the outline
+/// strength and the view's centre in map units. `half` is the view's half width and height in map
+/// units. None while the block looks are still being built.
+fn with_mosaic<T>(
     game: &Game<'_>,
     scope: &str,
     centre: [f64; 2],
     y: f64,
-    blocks_per_pixel: f32,
-    size: usize,
-) -> Option<Vec<u8>> {
-    let bpp = f64::from(blocks_per_pixel.clamp(0.25, MAX_BPP));
+    half: [f64; 2],
+    sample: impl FnOnce(&mosaic::Mosaic, f32, f64, f64) -> T,
+) -> Option<T> {
     let generation = game.pack.render.generation;
     state(|s| {
         if s.generation != generation {
@@ -327,7 +355,6 @@ pub(super) fn minimap(
                     s.task = Some((generation, task));
                 }
             }
-            SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
             return None;
         }
         if s.scope != scope {
@@ -341,9 +368,8 @@ pub(super) fn minimap(
         let proj = *s.mosaic.projection();
         let (cu, cv) = (centre[0], proj.v(y, centre[1]));
         s.mosaic.recentre(cu, cv);
-        let half = bpp * size as f64 / 2.0;
-        let (t0u, t0v) = s.mosaic.texel_of(cu - half, cv - half);
-        let (t1u, t1v) = s.mosaic.texel_of(cu + half, cv + half);
+        let (t0u, t0v) = s.mosaic.texel_of(cu - half[0], cv - half[1]);
+        let (t1u, t1v) = s.mosaic.texel_of(cu + half[0], cv + half[1]);
         let clamp = |t: f64| t.clamp(0.0, f64::from(SIDE)) as u32;
         s.mosaic
             .set_focus(Some((clamp(t0u), clamp(t0v), clamp(t1u), clamp(t1v))));
@@ -353,7 +379,8 @@ pub(super) fn minimap(
             (centre[0].floor() as i32) >> 4,
             (centre[1].floor() as i32) >> 4,
         );
-        let radius = ((half / 16.0).ceil() as i32 + 3).min(14);
+        let reach = half[0].max(half[1] / proj.sin);
+        let radius = ((reach / 16.0).ceil() as i32 + 3).min(14);
         let mut wanted: Vec<(i32, i32)> = (-radius..=radius)
             .flat_map(|dz| (-radius..=radius).map(move |dx| (pcx + dx, pcz + dz)))
             .filter(|at| game.world.chunks.contains_key(at))
@@ -406,51 +433,146 @@ pub(super) fn minimap(
         let painted = Instant::now();
         while painted.elapsed() < PAINT_BUDGET && s.mosaic.paint_step(&painter, cu, 24) {}
 
-        let outline = painter.style.outline;
-        let mut out = Vec::with_capacity(size * size * 4);
-        let limit = f64::from(SIDE) - 1.0;
-        for py in 0..size {
-            for px in 0..size {
-                // 2 x 2 samples a pixel: the host's picture is only 128 pixels wide, so the detail
-                // the mosaic holds is averaged down instead of picked at one texel.
-                let (mut sum, mut seen) = ([0u32; 3], 0u32);
-                for sy in 0..SUPER {
-                    for sx in 0..SUPER {
-                        let u = cu
-                            + (px as f64 + (sx as f64 + 0.5) / SUPER as f64 - size as f64 / 2.0)
-                                * bpp;
-                        let v = cv
-                            + (py as f64 + (sy as f64 + 0.5) / SUPER as f64 - size as f64 / 2.0)
-                                * bpp;
-                        let (ti, tj) = s.mosaic.texel_of(u, v);
-                        if (0.0..=limit).contains(&ti) && (0.0..=limit).contains(&tj) {
-                            let [r, g, b, a] = s.mosaic.shown_at(ti as u32, tj as u32, outline);
-                            if a != 0 {
-                                sum[0] += u32::from(r);
-                                sum[1] += u32::from(g);
-                                sum[2] += u32::from(b);
-                                seen += 1;
+        let out = sample(&s.mosaic, painter.style.outline, cu, cv);
+        s.painter = Some(painter);
+        Some(out)
+    })
+}
+
+/// The minimap's pixels (`size` x `size`, RGBA) in the angled view around `centre` (block x, z) at
+/// the player's height `y`, or none while the block looks are still being built.
+pub(super) fn minimap(
+    game: &Game<'_>,
+    scope: &str,
+    centre: [f64; 2],
+    y: f64,
+    blocks_per_pixel: f32,
+    size: usize,
+) -> Option<Vec<u8>> {
+    let bpp = f64::from(blocks_per_pixel.clamp(0.25, MAX_BPP));
+    let half = bpp * size as f64 / 2.0;
+    let out = with_mosaic(
+        game,
+        scope,
+        centre,
+        y,
+        [half, half],
+        |mosaic, outline, cu, cv| {
+            let mut out = Vec::with_capacity(size * size * 4);
+            let limit = f64::from(SIDE) - 1.0;
+            for py in 0..size {
+                for px in 0..size {
+                    // 2 x 2 samples a pixel: the host's picture is only 128 pixels wide, so the detail
+                    // the mosaic holds is averaged down instead of picked at one texel.
+                    let (mut sum, mut seen) = ([0u32; 3], 0u32);
+                    for sy in 0..SUPER {
+                        for sx in 0..SUPER {
+                            let u = cu
+                                + (px as f64 + (sx as f64 + 0.5) / SUPER as f64
+                                    - size as f64 / 2.0)
+                                    * bpp;
+                            let v = cv
+                                + (py as f64 + (sy as f64 + 0.5) / SUPER as f64
+                                    - size as f64 / 2.0)
+                                    * bpp;
+                            let (ti, tj) = mosaic.texel_of(u, v);
+                            if (0.0..=limit).contains(&ti) && (0.0..=limit).contains(&tj) {
+                                let [r, g, b, a] = mosaic.shown_at(ti as u32, tj as u32, outline);
+                                if a != 0 {
+                                    sum[0] += u32::from(r);
+                                    sum[1] += u32::from(g);
+                                    sum[2] += u32::from(b);
+                                    seen += 1;
+                                }
                             }
                         }
                     }
+                    out.extend(if seen == 0 {
+                        let shade = if (px / 16 + py / 16) % 2 == 0 { 20 } else { 23 };
+                        [shade, shade + 5, shade + 10, 255]
+                    } else {
+                        [
+                            (sum[0] / seen) as u8,
+                            (sum[1] / seen) as u8,
+                            (sum[2] / seen) as u8,
+                            255,
+                        ]
+                    });
                 }
-                out.extend(if seen == 0 {
-                    let shade = if (px / 16 + py / 16) % 2 == 0 { 20 } else { 23 };
-                    [shade, shade + 5, shade + 10, 255]
-                } else {
-                    [
-                        (sum[0] / seen) as u8,
-                        (sum[1] / seen) as u8,
-                        (sum[2] / seen) as u8,
-                        255,
-                    ]
-                });
+            }
+            sharpen(&mut out, size);
+            out
+        },
+    );
+    SHOWING.store(out.is_some(), std::sync::atomic::Ordering::Relaxed);
+    out
+}
+
+/// Unsharp mask over the RGBA picture: the averaged-down samples come out soft, this puts the
+/// edges and outlines back.
+fn sharpen(rgba: &mut [u8], size: usize) {
+    const AMOUNT: f32 = 0.8;
+    let src = rgba.to_vec();
+    for y in 1..size.saturating_sub(1) {
+        for x in 1..size.saturating_sub(1) {
+            for c in 0..3 {
+                let at = |dx: usize, dy: usize| {
+                    f32::from(src[((y + dy - 1) * size + x + dx - 1) * 4 + c])
+                };
+                let blur = (at(0, 1) + at(2, 1) + at(1, 0) + at(1, 2) + 4.0 * at(1, 1)) / 8.0;
+                let v = at(1, 1) + AMOUNT * (at(1, 1) - blur);
+                rgba[(y * size + x) * 4 + c] = v.clamp(0.0, 255.0) as u8;
             }
         }
-        s.painter = Some(painter);
-        SHOWING.store(true, std::sync::atomic::Ordering::Relaxed);
-        Some(out)
-    })
+    }
+}
+
+/// Draws the angled view over the world map's picture (`size` x `size`, RGBA, covering
+/// `128 * bpp` blocks tall and `aspect` times that wide around `centre`): every pixel the
+/// mosaic has painted replaces the flat one. Returns whether it drew. Only views the mosaic
+/// can hold are drawn; wider ones stay flat.
+pub(super) fn overlay(
+    game: &Game<'_>,
+    scope: &str,
+    centre: [f64; 2],
+    y: f64,
+    bpp: f64,
+    aspect: f64,
+    size: usize,
+    pixels: &mut [u8],
+) -> bool {
+    let span = 128.0 * bpp;
+    if span * aspect > 380.0 || span > 380.0 || pixels.len() < size * size * 4 {
+        FULL_SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
+        return false;
+    }
+    let done = with_mosaic(
+        game,
+        scope,
+        centre,
+        y,
+        [span * aspect / 2.0, span / 2.0],
+        |mosaic, outline, cu, cv| {
+            let limit = f64::from(SIDE) - 1.0;
+            for py in 0..size {
+                for px in 0..size {
+                    let u = cu + ((px as f64 + 0.5) / size as f64 - 0.5) * span * aspect;
+                    let v = cv + ((py as f64 + 0.5) / size as f64 - 0.5) * span;
+                    let (ti, tj) = mosaic.texel_of(u, v);
+                    if (0.0..=limit).contains(&ti) && (0.0..=limit).contains(&tj) {
+                        let [r, g, b, a] = mosaic.shown_at(ti as u32, tj as u32, outline);
+                        if a != 0 {
+                            let at = (py * size + px) * 4;
+                            pixels[at..at + 4].copy_from_slice(&[r, g, b, 255]);
+                        }
+                    }
+                }
+            }
+        },
+    )
+    .is_some();
+    FULL_SHOWING.store(done, std::sync::atomic::Ordering::Relaxed);
+    done
 }
 
 /// A cheap fingerprint of a read chunk, so an unchanged one is not painted again.

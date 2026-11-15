@@ -340,9 +340,20 @@ pub(super) fn map_marks(
     full: bool,
     aspect: f32,
 ) {
-    let angled = !full && crate::game::claim_borders_diorama_view::showing();
+    let angled = if full {
+        crate::game::claim_borders_diorama_view::full_showing()
+    } else {
+        crate::game::claim_borders_diorama_view::showing()
+    };
     let xy = |world| {
-        let point = if angled {
+        let point = if angled && full {
+            crate::game::claim_borders_diorama_view::mark_point_full(
+                view.center,
+                view.blocks_per_pixel,
+                aspect,
+                world,
+            )
+        } else if angled {
             crate::game::claim_borders_diorama_view::mark_point(
                 view.center,
                 view.blocks_per_pixel,
@@ -704,6 +715,7 @@ enum Button {
     Dimension(usize),
     Seed,
     Grid,
+    View3d,
     Settings,
     Mobs,
     Layer,
@@ -722,6 +734,7 @@ fn buttons(size: [f32; 2]) -> Vec<(Button, [f32; 4], String)> {
         (Button::Fit, lang.text("Показать приваты", "Fit claims")),
         (Button::Layer, lang.text("Рельеф", "Terrain")),
         (Button::Grid, lang.text("Сетка", "Grid")),
+        (Button::View3d, lang.text("Вид карты", "Map view")),
         (Button::Mobs, lang.text("Фильтр мобов", "Mob filter")),
         (Button::Settings, lang.text("Настройки", "Settings")),
     ]
@@ -874,6 +887,12 @@ fn operate(game: &Game<'_>, button: Button) {
     if matches!(button, Button::Grid) {
         let mut p = settings(game);
         p.grid = !p.grid;
+        configure(game, p);
+        return;
+    }
+    if matches!(button, Button::View3d) {
+        let mut p = settings(game);
+        p.view3d = !p.view3d;
         configure(game, p);
         return;
     }
@@ -1278,6 +1297,7 @@ pub(super) fn render(
                     Button::Fit => ui::Icon::Shield,
                     Button::Layer => ui::Icon::Layers,
                     Button::Grid => ui::Icon::Grid,
+                    Button::View3d => ui::Icon::Layers,
                     Button::Settings => ui::Icon::Settings,
                     Button::Mobs => ui::Icon::People,
                     _ => ui::Icon::Close,
@@ -1287,6 +1307,16 @@ pub(super) fn render(
                         "{}: {}",
                         language().text("Рельеф", "Terrain"),
                         p.layer.label_in(language())
+                    )
+                } else if matches!(button, Button::View3d) {
+                    format!(
+                        "{}: {}",
+                        language().text("Вид карты", "Map view"),
+                        if p.view3d {
+                            "3D"
+                        } else {
+                            language().text("плоский", "flat")
+                        }
                     )
                 } else if matches!(button, Button::Grid) {
                     format!(
@@ -1308,6 +1338,7 @@ pub(super) fn render(
                     &caption,
                     icon,
                     (matches!(button, Button::Grid) && p.grid)
+                        || (matches!(button, Button::View3d) && p.view3d)
                         || (matches!(button, Button::Layer) && p.layer == model::Layer::Cave),
                     screen.mouse,
                 );
