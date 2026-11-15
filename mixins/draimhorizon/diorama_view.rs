@@ -41,6 +41,8 @@ struct State {
     heights: BTreeMap<(i32, i32), Vec<i16>>,
     /// Chunks read before all their neighbours were known: read again once they are.
     partial: std::collections::BTreeSet<(i32, i32)>,
+    /// The pitch and shadow strength the mosaic was built and shaded with.
+    applied: (u8, u8),
 }
 
 fn new_mosaic() -> mosaic::Mosaic {
@@ -60,11 +62,29 @@ fn state<T>(f: impl FnOnce(&mut State) -> T) -> T {
                 fed: BTreeMap::new(),
                 heights: BTreeMap::new(),
                 partial: Default::default(),
+                applied: (50, 100),
             })
         })
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     f(&mut s)
+}
+
+use std::sync::atomic::{AtomicU8, Ordering};
+/// The 3D settings: camera pitch in degrees, shadow and sharpening strength in percent.
+static PITCH: AtomicU8 = AtomicU8::new(50);
+static SHADOW: AtomicU8 = AtomicU8::new(100);
+static SHARP: AtomicU8 = AtomicU8::new(80);
+
+/// Takes the 3D settings from the map preferences.
+pub(super) fn configure(pitch: u8, shadow: u8, sharp: u8) {
+    PITCH.store(pitch.clamp(30, 70), Ordering::Relaxed);
+    SHADOW.store(shadow.min(100), Ordering::Relaxed);
+    SHARP.store(sharp.min(100), Ordering::Relaxed);
+}
+
+fn pitch() -> f64 {
+    f64::from(PITCH.load(Ordering::Relaxed))
 }
 
 static FULL_SHOWING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -83,7 +103,7 @@ pub(super) fn mark_point(
     world: [f64; 2],
 ) -> [f32; 2] {
     let bpp = f64::from(blocks_per_pixel.clamp(0.25, MAX_BPP));
-    let sin = style::DEFAULT.pitch_degrees.to_radians().sin();
+    let sin = pitch().to_radians().sin();
     [
         (64.0 + (world[0] - view_centre[0]) / bpp) as f32,
         (64.0 + (world[1] - view_centre[1]) * sin / bpp) as f32,
@@ -103,7 +123,7 @@ pub(super) fn mark_point_full(
     world: [f64; 2],
 ) -> [f32; 2] {
     let bpp = f64::from(blocks_per_pixel);
-    let sin = style::DEFAULT.pitch_degrees.to_radians().sin();
+    let sin = pitch().to_radians().sin();
     [
         (64.0 + (world[0] - view_centre[0]) / bpp / f64::from(aspect)) as f32,
         (64.0 + (world[1] - view_centre[1]) * sin / bpp) as f32,
@@ -341,7 +361,8 @@ fn with_mosaic<T>(
                 s.fed.clear();
                 s.heights.clear();
                 s.partial.clear();
-                s.mosaic.clear();
+                s.mosaic = new_mosaic();
+                s.applied = (50, 100);
             }
         }
         if s.painter.is_none() {
@@ -364,7 +385,24 @@ fn with_mosaic<T>(
             s.partial.clear();
             s.mosaic.clear();
         }
-        let painter = s.painter.take().unwrap();
+        let mut painter = s.painter.take().unwrap();
+        let wanted_look = (
+            PITCH.load(Ordering::Relaxed),
+            SHADOW.load(Ordering::Relaxed),
+        );
+        if s.applied != wanted_look {
+            if s.applied.0 != wanted_look.0 {
+                painter.set_style(style::Style {
+                    pitch_degrees: pitch(),
+                    ..style::DEFAULT
+                });
+                s.mosaic = mosaic::Mosaic::with_texels(Projection::new(pitch()), SIDE, TEXELS);
+            }
+            s.applied = wanted_look;
+            s.fed.clear();
+            s.partial.clear();
+            s.mosaic.clear();
+        }
         let proj = *s.mosaic.projection();
         let (cu, cv) = (centre[0], proj.v(y, centre[1]));
         s.mosaic.recentre(cu, cv);
@@ -511,7 +549,10 @@ pub(super) fn minimap(
 /// Unsharp mask over the RGBA picture: the averaged-down samples come out soft, this puts the
 /// edges and outlines back.
 fn sharpen(rgba: &mut [u8], size: usize) {
-    const AMOUNT: f32 = 0.8;
+    let amount = f32::from(SHARP.load(Ordering::Relaxed)) / 100.0;
+    if amount <= 0.0 {
+        return;
+    }
     let src = rgba.to_vec();
     for y in 1..size.saturating_sub(1) {
         for x in 1..size.saturating_sub(1) {
@@ -520,7 +561,7 @@ fn sharpen(rgba: &mut [u8], size: usize) {
                     f32::from(src[((y + dy - 1) * size + x + dx - 1) * 4 + c])
                 };
                 let blur = (at(0, 1) + at(2, 1) + at(1, 0) + at(1, 2) + 4.0 * at(1, 1)) / 8.0;
-                let v = at(1, 1) + AMOUNT * (at(1, 1) - blur);
+                let v = at(1, 1) + amount * (at(1, 1) - blur);
                 rgba[(y * size + x) * 4 + c] = v.clamp(0.0, 255.0) as u8;
             }
         }
@@ -632,7 +673,8 @@ fn shade(
                     }
                 }
             }
-            sun[i] = (lit * 255.0).round() as u8;
+            let strength = f64::from(SHADOW.load(Ordering::Relaxed)) / 100.0;
+            sun[i] = ((1.0 - strength * (1.0 - lit)) * 255.0).round() as u8;
             // Corner occlusion: the eight neighbours standing above this block close it in.
             let mut closed = 0.0f64;
             for (ox, oz) in [

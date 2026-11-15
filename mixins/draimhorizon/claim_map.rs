@@ -87,6 +87,11 @@ pub struct Preferences {
     pub shading: bool,
     /// Angled 3D (Diorama) view instead of the flat top-down map; off keeps the flat map.
     pub view3d: bool,
+    /// 3D camera pitch in degrees (30..=70) and the strength, in percent, of sun shadows and of
+    /// the sharpening of the small picture.
+    pub pitch3d: u8,
+    pub shadow3d: u8,
+    pub sharp3d: u8,
     pub profile: u8,
     pub mobs: u8,
     pub mob_hidden: [u64; 2],
@@ -113,6 +118,9 @@ impl Default for Preferences {
             remember: true,
             shading: true,
             view3d: false,
+            pitch3d: 50,
+            shadow3d: 100,
+            sharp3d: 80,
             profile: 0,
             mobs: 1,
             mob_hidden: [0; 2],
@@ -128,6 +136,9 @@ impl Preferences {
         self.profile %= 8;
         self.mobs %= 3;
         self.size = self.size.clamp(64, 192);
+        self.pitch3d = self.pitch3d.clamp(30, 70);
+        self.shadow3d = self.shadow3d.min(100);
+        self.sharp3d = self.sharp3d.min(100);
         self.zoom = if self.zoom.is_finite() {
             self.zoom.clamp(0.5, 4.0)
         } else {
@@ -146,7 +157,7 @@ impl Preferences {
     }
     pub fn encode(self) -> String {
         let p = self.normalized();
-        json!({"schema":1,"minimap":p.minimap,"corner":p.corner,"size":p.size,"zoom":p.zoom,"grid":p.grid,"coordinates":p.coordinates,"layer":p.layer as u8,"marks":p.marks,"own":p.own,"friends":p.friends,"fill":p.fill,"outline":p.outline,"labels":p.labels,"sort":p.sort as u8,"all_dimensions":p.all_dimensions,"grid_step":p.grid_step,"remember":p.remember,"shading":p.shading,"view3d":p.view3d,"profile":p.profile,"mobs":p.mobs,"mob_hidden":p.mob_hidden}).to_string()
+        json!({"schema":1,"minimap":p.minimap,"corner":p.corner,"size":p.size,"zoom":p.zoom,"grid":p.grid,"coordinates":p.coordinates,"layer":p.layer as u8,"marks":p.marks,"own":p.own,"friends":p.friends,"fill":p.fill,"outline":p.outline,"labels":p.labels,"sort":p.sort as u8,"all_dimensions":p.all_dimensions,"grid_step":p.grid_step,"remember":p.remember,"shading":p.shading,"view3d":p.view3d,"pitch3d":p.pitch3d,"shadow3d":p.shadow3d,"sharp3d":p.sharp3d,"profile":p.profile,"mobs":p.mobs,"mob_hidden":p.mob_hidden}).to_string()
     }
     pub fn decode(raw: &str) -> Result<Self, String> {
         if raw.len() > 4096 {
@@ -187,6 +198,9 @@ impl Preferences {
             remember: flag("remember", true),
             shading: flag("shading", true),
             view3d: flag("view3d", false),
+            pitch3d: v["pitch3d"].as_u64().unwrap_or(50).clamp(30, 70) as u8,
+            shadow3d: v["shadow3d"].as_u64().unwrap_or(100).min(100) as u8,
+            sharp3d: v["sharp3d"].as_u64().unwrap_or(80).min(100) as u8,
             profile: v["profile"].as_u64().unwrap_or(0).min(7) as u8,
             mobs: v["mobs"].as_u64().unwrap_or(1).min(2) as u8,
             mob_hidden: [
@@ -1160,6 +1174,9 @@ mod tests {
             remember: false,
             shading: false,
             view3d: true,
+            pitch3d: 40,
+            shadow3d: 30,
+            sharp3d: 0,
             profile: 7,
             ..p
         };

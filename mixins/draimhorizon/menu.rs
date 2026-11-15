@@ -119,6 +119,9 @@ pub enum MapOption {
     Zoom,
     Fill,
     Outline,
+    Pitch3d,
+    Shadow3d,
+    Sharp3d,
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BorderOption {
@@ -3541,6 +3544,24 @@ impl Menu {
                     ),
                     Control::MapView3d,
                 )],
+                adjust(
+                    self.language.text("Угол 3D", "3D angle"),
+                    format!("{}°", p.pitch3d),
+                    Control::MapAdjust(MapOption::Pitch3d, -1),
+                    Control::MapAdjust(MapOption::Pitch3d, 1),
+                ),
+                adjust(
+                    self.language.text("Тени 3D", "3D shadows"),
+                    format!("{}%", p.shadow3d),
+                    Control::MapAdjust(MapOption::Shadow3d, -1),
+                    Control::MapAdjust(MapOption::Shadow3d, 1),
+                ),
+                adjust(
+                    self.language.text("Чёткость 3D", "3D sharpness"),
+                    format!("{}%", p.sharp3d),
+                    Control::MapAdjust(MapOption::Sharp3d, -1),
+                    Control::MapAdjust(MapOption::Sharp3d, 1),
+                ),
                 vec![(
                     self.language
                         .text("Сбросить настройки карты", "Reset map settings")
@@ -6465,6 +6486,15 @@ impl Menu {
                     }
                     MapOption::Zoom => p.zoom *= if d > 0 { 2.0 } else { 0.5 },
                     MapOption::Fill => p.fill += f32::from(d) * 0.05,
+                    MapOption::Pitch3d => {
+                        p.pitch3d = (i16::from(p.pitch3d) + i16::from(d) * 5).clamp(30, 70) as u8
+                    }
+                    MapOption::Shadow3d => {
+                        p.shadow3d = (i16::from(p.shadow3d) + i16::from(d) * 10).clamp(0, 100) as u8
+                    }
+                    MapOption::Sharp3d => {
+                        p.sharp3d = (i16::from(p.sharp3d) + i16::from(d) * 10).clamp(0, 100) as u8
+                    }
                     MapOption::Outline => {
                         p.outline = (i16::from(p.outline) + i16::from(d)).clamp(1, 3) as u8
                     }

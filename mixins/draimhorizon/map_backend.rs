@@ -140,6 +140,7 @@ fn draw_minimap(
         );
     }
     let p = request.preferences;
+    crate::game::claim_borders_diorama_view::configure(p.pitch3d, p.shadow3d, p.sharp3d);
     let changed = cache.live_displayed.is_none_or(|(old, last, shading)| {
         old != layer
             || shading != p.shading
@@ -393,6 +394,12 @@ pub(in crate::game) fn update(game: &mut Game<'_>) -> bool {
             };
             let aspect = image.query.render.aspect as f32;
             let mut pixels = image.pixels;
+            let look = request.preferences;
+            crate::game::claim_borders_diorama_view::configure(
+                look.pitch3d,
+                look.shadow3d,
+                look.sharp3d,
+            );
             if request.preferences.view3d
                 && matches!(scan_layer, Layer::Surface)
                 && image.query.context.dimension == request.source.dimension
