@@ -1,21 +1,12 @@
 # История версий
 
-## 0.40.11
-
-- Diorama map, step 4 (world map): the **M map** now shows the angled 3D view over the terrain around the player when **Map view: 3D** is on, with a new **Map view: 3D / flat** button in its toolbar (the same setting as in J → Claims). Where the loaded chunks have been painted by the mosaic the angled picture replaces the flat one; saved terrain further away, other dimensions, cave views and views wider than about 380 blocks (zoom out) stay flat. Waypoint, player and mob marks follow the angled projection. This version keeps the earlier shadows.
-- The 3D minimap got an unsharp mask over its 128 px picture: the 2 x 2 averaging made it soft ("мыльная"), the mask restores edges and outlines.
-
-## 0.40.10
-
-- 3D minimap sharpness: the host's minimap picture is a fixed 128 x 128 sprite, so the 3D view was picked texel by texel and looked pixelated. The mosaic now holds four texels per block (was two) and each pixel averages 2 x 2 samples of it, which smooths edges, outlines and textures. The 3D view spans up to 384 blocks, so its widest zoom is 2.5 blocks per pixel (was 3).
-
-## 0.40.9
-
-- Diorama map, step 3 (light): the 3D minimap now has **sun shadows** and **corner occlusion**, which the core did not draw. For every column the mod walks toward the sun (38 degrees up, from the west-south-west) over the heights of its own and the neighbouring chunks, and a taller block in the way darkens the face, softly with how far above the ray it stands; the eight neighbours that rise above a block close it in and dim its ambient light. A chunk read before its neighbours were known is read again once they are, so shadows do not break at chunk edges. Columns, not Diorama's per-pixel rays, so the shadows are blocky.
-
 ## 0.40.8
 
 - Diorama map, step 2 (minimap): a **Map view: 3D / flat** switch in J → Claims → Map settings (off by default, saved with the map settings). In 3D the minimap is drawn by the Diorama core from the loaded chunks: the angled 50 degree view with top and south faces, the game's own block textures averaged per face from the loaded resource packs (grass, leaves and water tinted by the biome), Diorama's light, height shade, colour grade and outlines. The block looks are built once on a worker thread and rebuilt when the resource packs reload; chunks are read nearest first inside a time budget of about a millisecond a frame, near chunks again every 0.8 s so edits show, and the picture is painted a few rows at a time. Player and waypoint marks are placed with the angled projection (at the player's height). It applies to the surface view; cave views and the flat setting use the old map, and zoom is limited to 3 blocks per pixel in 3D. The M map and saved explored terrain are still flat; they come next.
+- Diorama map, step 4 (world map): the **M map** now shows the angled 3D view over the terrain around the player when **Map view: 3D** is on, with a new **Map view: 3D / flat** button in its toolbar (the same setting as in J → Claims). Where the loaded chunks have been painted by the mosaic the angled picture replaces the flat one; saved terrain further away, other dimensions, cave views and views wider than about 380 blocks (zoom out) stay flat. Waypoint, player and mob marks follow the angled projection. This version keeps the earlier shadows.
+- The 3D minimap got an unsharp mask over its 128 px picture: the 2 x 2 averaging made it soft ("мыльная"), the mask restores edges and outlines.
+- 3D minimap sharpness: the host's minimap picture is a fixed 128 x 128 sprite, so the 3D view was picked texel by texel and looked pixelated. The mosaic now holds four texels per block (was two) and each pixel averages 2 x 2 samples of it, which smooths edges, outlines and textures. The 3D view spans up to 384 blocks, so its widest zoom is 2.5 blocks per pixel (was 3).
+- Diorama map, step 3 (light): the 3D minimap now has **sun shadows** and **corner occlusion**, which the core did not draw. For every column the mod walks toward the sun (38 degrees up, from the west-south-west) over the heights of its own and the neighbouring chunks, and a taller block in the way darkens the face, softly with how far above the ray it stands; the eight neighbours that rise above a block close it in and dim its ambient light. A chunk read before its neighbours were known is read again once they are, so shadows do not break at chunk edges. Columns, not Diorama's per-pixel rays, so the shadows are blocky.
 
 ## 0.40.7
 
