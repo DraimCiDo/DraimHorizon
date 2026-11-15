@@ -1,3 +1,11 @@
+**DraimHorizon 0.40.10 - 3D minimap: sharper picture**
+
+Target: official Horizon Nightly source `9f42064` (unchanged).
+
+- The 3D minimap is drawn from finer detail (four texels per block) and averaged down per pixel, so edges and textures are smooth instead of blocky. Widest zoom in 3D is now 2.5 blocks per pixel. The picture itself is still the host's fixed 128 x 128 minimap sprite.
+
+Verification: Clippy with warnings denied, cargo fmt and the workspace tests pass. Not checked in a running game.
+
 **DraimHorizon 0.40.9 - 3D minimap: shadows and occlusion**
 
 Target: official Horizon Nightly source `9f42064` (unchanged).

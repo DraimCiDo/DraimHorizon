@@ -14,9 +14,11 @@ use std::{
 
 /// Blocks read down from each column's top: south faces and water floors need them.
 const DEPTH: u8 = 16;
-/// Texels per side of the mosaic (512 blocks at two texels a block).
-const SIDE: u32 = 1024;
-const TEXELS: u32 = 2;
+/// Texels per side of the mosaic (384 blocks at four texels a block).
+const SIDE: u32 = 1536;
+const TEXELS: u32 = 4;
+/// Samples per output pixel along each axis.
+const SUPER: usize = 2;
 /// Game-thread time spent reading chunks and painting rows per call.
 const READ_BUDGET: Duration = Duration::from_micros(1200);
 const PAINT_BUDGET: Duration = Duration::from_micros(1500);
@@ -25,7 +27,7 @@ const REFRESH: Duration = Duration::from_secs(3);
 /// The nearest chunks are refreshed faster.
 const NEAR_REFRESH: Duration = Duration::from_millis(800);
 /// The widest view (blocks per pixel) the mosaic can hold across the 128 pixel box.
-pub(super) const MAX_BPP: f32 = 3.0;
+pub(super) const MAX_BPP: f32 = 2.5;
 
 struct State {
     generation: u64,
@@ -409,19 +411,39 @@ pub(super) fn minimap(
         let limit = f64::from(SIDE) - 1.0;
         for py in 0..size {
             for px in 0..size {
-                let u = cu + (px as f64 + 0.5 - size as f64 / 2.0) * bpp;
-                let v = cv + (py as f64 + 0.5 - size as f64 / 2.0) * bpp;
-                let (ti, tj) = s.mosaic.texel_of(u, v);
-                let [r, g, b, a] = if (0.0..=limit).contains(&ti) && (0.0..=limit).contains(&tj) {
-                    s.mosaic.shown_at(ti as u32, tj as u32, outline)
-                } else {
-                    [0; 4]
-                };
-                out.extend(if a == 0 {
+                // 2 x 2 samples a pixel: the host's picture is only 128 pixels wide, so the detail
+                // the mosaic holds is averaged down instead of picked at one texel.
+                let (mut sum, mut seen) = ([0u32; 3], 0u32);
+                for sy in 0..SUPER {
+                    for sx in 0..SUPER {
+                        let u = cu
+                            + (px as f64 + (sx as f64 + 0.5) / SUPER as f64 - size as f64 / 2.0)
+                                * bpp;
+                        let v = cv
+                            + (py as f64 + (sy as f64 + 0.5) / SUPER as f64 - size as f64 / 2.0)
+                                * bpp;
+                        let (ti, tj) = s.mosaic.texel_of(u, v);
+                        if (0.0..=limit).contains(&ti) && (0.0..=limit).contains(&tj) {
+                            let [r, g, b, a] = s.mosaic.shown_at(ti as u32, tj as u32, outline);
+                            if a != 0 {
+                                sum[0] += u32::from(r);
+                                sum[1] += u32::from(g);
+                                sum[2] += u32::from(b);
+                                seen += 1;
+                            }
+                        }
+                    }
+                }
+                out.extend(if seen == 0 {
                     let shade = if (px / 16 + py / 16) % 2 == 0 { 20 } else { 23 };
                     [shade, shade + 5, shade + 10, 255]
                 } else {
-                    [r, g, b, 255]
+                    [
+                        (sum[0] / seen) as u8,
+                        (sum[1] / seen) as u8,
+                        (sum[2] / seen) as u8,
+                        255,
+                    ]
                 });
             }
         }

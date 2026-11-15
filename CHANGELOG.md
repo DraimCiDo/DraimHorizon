@@ -1,5 +1,9 @@
 # История версий
 
+## 0.40.10
+
+- 3D minimap sharpness: the host's minimap picture is a fixed 128 x 128 sprite, so the 3D view was picked texel by texel and looked pixelated. The mosaic now holds four texels per block (was two) and each pixel averages 2 x 2 samples of it, which smooths edges, outlines and textures. The 3D view spans up to 384 blocks, so its widest zoom is 2.5 blocks per pixel (was 3).
+
 ## 0.40.9
 
 - Diorama map, step 3 (light): the 3D minimap now has **sun shadows** and **corner occlusion**, which the core did not draw. For every column the mod walks toward the sun (38 degrees up, from the west-south-west) over the heights of its own and the neighbouring chunks, and a taller block in the way darkens the face, softly with how far above the ray it stands; the eight neighbours that rise above a block close it in and dim its ambient light. A chunk read before its neighbours were known is read again once they are, so shadows do not break at chunk edges. Columns, not Diorama's per-pixel rays, so the shadows are blocky.
