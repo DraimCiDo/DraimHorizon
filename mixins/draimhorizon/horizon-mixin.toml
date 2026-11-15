@@ -1,6 +1,6 @@
 [mod]
 id = "draimhorizon"
-version = "0.40.7"
+version = "0.40.8"
 priority = 100
 
 # Additional visible models only: server metadata and effects remain untouched.
@@ -1361,6 +1361,12 @@ bindings = [
   { name = "value", ty = "bool", value = "$value" },
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
 ]
+
+[[module]]
+id = "diorama-view"
+file = "crates/horizon-client/src/game.rs"
+name = "claim_borders_diorama_view"
+source = "diorama_view.rs"
 
 # Diorama minimap core (MIT), see diorama/NOTICE.md.
 [[module]]

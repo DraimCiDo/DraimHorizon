@@ -158,13 +158,28 @@ fn draw_minimap(
         && let Some(rect) = game.gui.atlas.sprites.get(MINIMAP_SPRITE).copied()
     {
         let size = minimap::SIZE;
-        let mut pixels = history::compose_minimap(
-            &slice.tiles,
-            request.view.center,
-            request.view.blocks_per_pixel,
-            &horizon_client::blocks::MAP_COLORS,
-            p.shading,
-        );
+        let angled = if p.view3d && layer == Layer::Surface {
+            crate::game::claim_borders_diorama_view::minimap(
+                game,
+                &format!("{}|{}", request.source.scope, request.dimension),
+                request.view.center,
+                request.source.player[1],
+                request.view.blocks_per_pixel,
+                size,
+            )
+        } else {
+            crate::game::claim_borders_diorama_view::reset_if_showing();
+            None
+        };
+        let mut pixels = angled.unwrap_or_else(|| {
+            history::compose_minimap(
+                &slice.tiles,
+                request.view.center,
+                request.view.blocks_per_pixel,
+                &horizon_client::blocks::MAP_COLORS,
+                p.shading,
+            )
+        });
         model::paint_aspect(
             &mut pixels,
             size,

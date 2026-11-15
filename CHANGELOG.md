@@ -1,5 +1,9 @@
 # История версий
 
+## 0.40.8
+
+- Diorama map, step 2 (minimap): a **Map view: 3D / flat** switch in J → Claims → Map settings (off by default, saved with the map settings). In 3D the minimap is drawn by the Diorama core from the loaded chunks: the angled 50 degree view with top and south faces, the game's own block textures averaged per face from the loaded resource packs (grass, leaves and water tinted by the biome), Diorama's light, height shade, colour grade and outlines. The block looks are built once on a worker thread and rebuilt when the resource packs reload; chunks are read nearest first inside a time budget of about a millisecond a frame, near chunks again every 0.8 s so edits show, and the picture is painted a few rows at a time. Player and waypoint marks are placed with the angled projection (at the player's height). It applies to the surface view; cave views and the flat setting use the old map, and zoom is limited to 3 blocks per pixel in 3D. The M map and saved explored terrain are still flat; they come next.
+
 ## 0.40.7
 
 - Diorama map, step 1: the pure core of the angled (oblique, 50 degrees, north-facing) map of Diorama by Dara Adedeji is added under `mixins/draimhorizon/diorama/`, taken with its authorship from the unofficial Horizon port by Worrcc (MIT, see `NOTICE.md` there; both licenses stay with the bundle): projection, style (sun, sky, height shade, grade, outlines), block-look table, the column painter that draws top and south faces, cave and Nether slices, and the mosaic of baked chunks. Not taken: the port's WASM glue, which needs the Horizon-iOS fork's mod API. Nothing is wired into the minimap or the M map yet, so the maps look as before; the next steps connect loaded chunks and resource-pack textures to it and draw it in both maps. The core's own 66 tests run with ours.

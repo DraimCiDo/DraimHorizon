@@ -340,8 +340,17 @@ pub(super) fn map_marks(
     full: bool,
     aspect: f32,
 ) {
+    let angled = !full && crate::game::claim_borders_diorama_view::showing();
     let xy = |world| {
-        let point = view.pixel_aspect(world, 128.0, aspect);
+        let point = if angled {
+            crate::game::claim_borders_diorama_view::mark_point(
+                view.center,
+                view.blocks_per_pixel,
+                world,
+            )
+        } else {
+            view.pixel_aspect(world, 128.0, aspect)
+        };
         [
             rect[0] + point[0] / 128.0 * rect[2],
             rect[1] + point[1] / 128.0 * rect[3],

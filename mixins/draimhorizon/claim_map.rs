@@ -85,6 +85,8 @@ pub struct Preferences {
     pub grid_step: u8,
     pub remember: bool,
     pub shading: bool,
+    /// Angled 3D (Diorama) view instead of the flat top-down map; off keeps the flat map.
+    pub view3d: bool,
     pub profile: u8,
     pub mobs: u8,
     pub mob_hidden: [u64; 2],
@@ -110,6 +112,7 @@ impl Default for Preferences {
             grid_step: 8,
             remember: true,
             shading: true,
+            view3d: false,
             profile: 0,
             mobs: 1,
             mob_hidden: [0; 2],
@@ -143,7 +146,7 @@ impl Preferences {
     }
     pub fn encode(self) -> String {
         let p = self.normalized();
-        json!({"schema":1,"minimap":p.minimap,"corner":p.corner,"size":p.size,"zoom":p.zoom,"grid":p.grid,"coordinates":p.coordinates,"layer":p.layer as u8,"marks":p.marks,"own":p.own,"friends":p.friends,"fill":p.fill,"outline":p.outline,"labels":p.labels,"sort":p.sort as u8,"all_dimensions":p.all_dimensions,"grid_step":p.grid_step,"remember":p.remember,"shading":p.shading,"profile":p.profile,"mobs":p.mobs,"mob_hidden":p.mob_hidden}).to_string()
+        json!({"schema":1,"minimap":p.minimap,"corner":p.corner,"size":p.size,"zoom":p.zoom,"grid":p.grid,"coordinates":p.coordinates,"layer":p.layer as u8,"marks":p.marks,"own":p.own,"friends":p.friends,"fill":p.fill,"outline":p.outline,"labels":p.labels,"sort":p.sort as u8,"all_dimensions":p.all_dimensions,"grid_step":p.grid_step,"remember":p.remember,"shading":p.shading,"view3d":p.view3d,"profile":p.profile,"mobs":p.mobs,"mob_hidden":p.mob_hidden}).to_string()
     }
     pub fn decode(raw: &str) -> Result<Self, String> {
         if raw.len() > 4096 {
@@ -183,6 +186,7 @@ impl Preferences {
             grid_step: v["grid_step"].as_u64().unwrap_or(8).min(32) as u8,
             remember: flag("remember", true),
             shading: flag("shading", true),
+            view3d: flag("view3d", false),
             profile: v["profile"].as_u64().unwrap_or(0).min(7) as u8,
             mobs: v["mobs"].as_u64().unwrap_or(1).min(2) as u8,
             mob_hidden: [
@@ -1155,10 +1159,12 @@ mod tests {
         let custom = Preferences {
             remember: false,
             shading: false,
+            view3d: true,
             profile: 7,
             ..p
         };
         assert_eq!(Preferences::decode(&custom.encode()).unwrap(), custom);
+        assert!(!p.view3d && !Preferences::decode("{\"schema\":1}").unwrap().view3d);
         let legacy = Preferences::decode(r#"{"schema":1,"grid":true}"#).unwrap();
         assert!(legacy.remember && legacy.shading && legacy.grid);
         assert_eq!(legacy.profile, 0);

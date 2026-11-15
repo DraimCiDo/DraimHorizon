@@ -1040,6 +1040,7 @@ pub enum Control {
     MapMarks,
     MapRemember,
     MapShading,
+    MapView3d,
     MapMobs,
     MapProfile,
     ClearClaimCache,
@@ -3528,6 +3529,18 @@ impl Menu {
                     ),
                     Control::MapMobs,
                 ),
+                vec![(
+                    localized!(
+                        self.language,
+                        "Вид карты: {}",
+                        "Map view: {}",
+                        self.language.text(
+                            if p.view3d { "3D" } else { "плоский" },
+                            if p.view3d { "3D" } else { "flat" }
+                        )
+                    ),
+                    Control::MapView3d,
+                )],
                 vec![(
                     self.language
                         .text("Сбросить настройки карты", "Reset map settings")
@@ -6404,6 +6417,7 @@ impl Menu {
             | Control::MapProfile
             | Control::MapMobs
             | Control::MapShading
+            | Control::MapView3d
             | Control::MapMarks
             | Control::MapGrid
             | Control::MapCoordinates
@@ -6422,6 +6436,7 @@ impl Menu {
                     Control::MapProfile => p.profile = (p.profile + 1) % 8,
                     Control::MapMobs => p.mobs = (p.mobs + 1) % 3,
                     Control::MapShading => p.shading = !p.shading,
+                    Control::MapView3d => p.view3d = !p.view3d,
                     Control::MapMarks => p.marks = !p.marks,
                     Control::MapGrid => p.grid = !p.grid,
                     Control::MapCoordinates => p.coordinates = !p.coordinates,
