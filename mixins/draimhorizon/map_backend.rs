@@ -140,7 +140,6 @@ fn draw_minimap(
         );
     }
     let p = request.preferences;
-    crate::game::claim_borders_diorama_view::configure(p.pitch3d, p.shadow3d, p.sharp3d);
     let changed = cache.live_displayed.is_none_or(|(old, last, shading)| {
         old != layer
             || shading != p.shading
@@ -159,28 +158,13 @@ fn draw_minimap(
         && let Some(rect) = game.gui.atlas.sprites.get(MINIMAP_SPRITE).copied()
     {
         let size = minimap::SIZE;
-        let angled = if p.view3d && layer == Layer::Surface {
-            crate::game::claim_borders_diorama_view::minimap(
-                game,
-                &format!("{}|{}", request.source.scope, request.dimension),
-                request.view.center,
-                request.source.player[1],
-                request.view.blocks_per_pixel,
-                size,
-            )
-        } else {
-            crate::game::claim_borders_diorama_view::reset_if_showing();
-            None
-        };
-        let mut pixels = angled.unwrap_or_else(|| {
-            history::compose_minimap(
-                &slice.tiles,
-                request.view.center,
-                request.view.blocks_per_pixel,
-                &horizon_client::blocks::MAP_COLORS,
-                p.shading,
-            )
-        });
+        let mut pixels = history::compose_minimap(
+            &slice.tiles,
+            request.view.center,
+            request.view.blocks_per_pixel,
+            &horizon_client::blocks::MAP_COLORS,
+            p.shading,
+        );
         model::paint_aspect(
             &mut pixels,
             size,
@@ -217,6 +201,10 @@ pub(in crate::game) fn update(game: &mut Game<'_>) -> bool {
     let Some(request) = view::request(game) else {
         return false;
     };
+    // "Map view: 3D" is a map of its own (Diorama); the flat map below does not run for it.
+    if request.preferences.view3d {
+        return super::claim_borders_diorama_map::update(game, &request);
+    }
     let mut cache = state().lock().unwrap_or_else(|p| p.into_inner());
     if cache.worker.is_none() {
         let root = match Game::native_config_dir() {
@@ -393,30 +381,7 @@ pub(in crate::game) fn update(game: &mut Game<'_>) -> bool {
                 blocks_per_pixel: image.query.render.bpp as f32,
             };
             let aspect = image.query.render.aspect as f32;
-            let mut pixels = image.pixels;
-            let look = request.preferences;
-            crate::game::claim_borders_diorama_view::configure(
-                look.pitch3d,
-                look.shadow3d,
-                look.sharp3d,
-            );
-            if request.preferences.view3d
-                && matches!(scan_layer, Layer::Surface)
-                && image.query.context.dimension == request.source.dimension
-            {
-                crate::game::claim_borders_diorama_view::overlay(
-                    game,
-                    &format!("{}|{}", request.source.scope, request.dimension),
-                    actual.center,
-                    request.source.player[1],
-                    f64::from(actual.blocks_per_pixel),
-                    f64::from(aspect),
-                    size,
-                    &mut pixels,
-                );
-            } else {
-                crate::game::claim_borders_diorama_view::reset_full();
-            }
+            let pixels = image.pixels;
             if let Some(rect) = game
                 .gui
                 .atlas

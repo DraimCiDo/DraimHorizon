@@ -214,7 +214,7 @@ pub(super) fn receive(peer: &claim_borders_relay_client::Peer, body: &str, tab: 
     });
 }
 pub(super) fn frame(game: &mut Game<'_>) {
-    if !game.native_on(claims::ID) || game.remote.is_none() || game.native_player().is_none() {
+    if !game.native_on(claims::ID) || !client::on_horizon(game) || game.native_player().is_none() {
         return;
     }
     let Some((scope, own)) = client::scope(game) else {
@@ -258,7 +258,7 @@ pub(super) fn frame(game: &mut Game<'_>) {
         }
         if let Some(land) = land {
             claims::with_state(|s| s.restore(land));
-        } else if game.integrated.is_none() {
+        } else if client::on_horizon(game) {
             // Single player has no claims plugin; asking would raise an unknown-command prompt.
             claims::with_state(|s| s.begin_refresh());
             game.send_unattended_command("claims");

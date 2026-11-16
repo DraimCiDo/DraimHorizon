@@ -74,7 +74,7 @@ pub(super) fn server(text: &str) {
     }
 }
 pub(super) fn frame(game: &mut Game<'_>) {
-    if !game.native_on(claims::ID) || game.remote.is_none() || !enabled(game) {
+    if !game.native_on(claims::ID) || !client::on_horizon(game) || !enabled(game) {
         return;
     }
     let Some((scope, _)) = client::scope(game) else {

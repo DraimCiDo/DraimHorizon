@@ -280,6 +280,11 @@ pub const GLASS_COVERAGE: f32 = 0.55;
 /// lava; no collision is a plant (but snow layers are solid); else solid.
 /// The host marks waterlogged blocks apart, and those have collision.
 pub fn classify(block: &str, f: u16) -> Kind {
+    // Hide ground vegetation even when the host gives it collision (for example bamboo).
+    // Aquatic plants keep the water classification so the surface does not become a hole.
+    if hidden_vegetation(block) {
+        return Kind::Air;
+    }
     let fluid = f & (flags::WATER | flags::LAVA) != 0;
     if f & flags::AIR != 0 || (f & flags::INVISIBLE != 0 && !fluid) {
         return Kind::Air;
@@ -299,6 +304,87 @@ pub fn classify(block: &str, f: u16) -> Kind {
         };
     }
     Kind::Solid
+}
+
+/// Ground vegetation omitted from the map; terrain, tree leaves and fluids stay visible.
+fn hidden_vegetation(block: &str) -> bool {
+    let Some(name) = block.strip_prefix("minecraft:") else {
+        return false;
+    };
+    matches!(
+        name,
+        "grass"
+            | "short_grass"
+            | "tall_grass"
+            | "fern"
+            | "large_fern"
+            | "dead_bush"
+            | "bush"
+            | "short_dry_grass"
+            | "tall_dry_grass"
+            | "sugar_cane"
+            | "bamboo"
+            | "bamboo_sapling"
+            | "dandelion"
+            | "poppy"
+            | "blue_orchid"
+            | "allium"
+            | "azure_bluet"
+            | "oxeye_daisy"
+            | "cornflower"
+            | "lily_of_the_valley"
+            | "wither_rose"
+            | "sunflower"
+            | "lilac"
+            | "rose_bush"
+            | "peony"
+            | "torchflower"
+            | "pink_petals"
+            | "wildflowers"
+            | "leaf_litter"
+            | "firefly_bush"
+            | "pitcher_plant"
+            | "pitcher_crop"
+            | "torchflower_crop"
+            | "wheat"
+            | "carrots"
+            | "potatoes"
+            | "beetroots"
+            | "sweet_berry_bush"
+            | "nether_wart"
+            | "melon_stem"
+            | "pumpkin_stem"
+            | "attached_melon_stem"
+            | "attached_pumpkin_stem"
+            | "vine"
+            | "weeping_vines"
+            | "weeping_vines_plant"
+            | "twisting_vines"
+            | "twisting_vines_plant"
+            | "cave_vines"
+            | "cave_vines_plant"
+            | "hanging_roots"
+            | "nether_sprouts"
+            | "crimson_roots"
+            | "warped_roots"
+            | "brown_mushroom"
+            | "red_mushroom"
+            | "crimson_fungus"
+            | "warped_fungus"
+            | "azalea"
+            | "flowering_azalea"
+            | "mangrove_propagule"
+            | "small_dripleaf"
+            | "big_dripleaf"
+            | "big_dripleaf_stem"
+            | "lily_pad"
+            | "moss_carpet"
+            | "pale_moss_carpet"
+            | "pale_hanging_moss"
+            | "open_eyeblossom"
+            | "closed_eyeblossom"
+    ) || name.ends_with("_tulip")
+        || name.ends_with("_sapling")
 }
 
 /// Leaves stay solid whatever their coverage (`BlockTags.LEAVES`,
@@ -691,7 +777,7 @@ mod tests {
                 Kind::Glass,
                 Kind::Solid,
                 Kind::Water,
-                Kind::Plant,
+                Kind::Air,
                 Kind::Solid,
                 Kind::Solid
             ]
@@ -739,6 +825,28 @@ mod tests {
     }
 
     #[test]
+    fn ground_vegetation_is_hidden_but_terrain_remains() {
+        for block in [
+            "minecraft:short_grass",
+            "minecraft:tall_grass",
+            "minecraft:fern",
+            "minecraft:large_fern",
+            "minecraft:sugar_cane",
+            "minecraft:bamboo",
+            "minecraft:poppy",
+            "minecraft:wheat",
+            "minecraft:vine",
+            "minecraft:dead_bush",
+        ] {
+            assert_eq!(classify(block, flags::NO_COLLISION), Kind::Air);
+            assert_eq!(classify(block, 0), Kind::Air);
+        }
+        assert_eq!(classify("minecraft:grass_block", 0), Kind::Solid);
+        assert_eq!(classify("minecraft:oak_leaves", 0), Kind::Solid);
+        assert_eq!(classify("minecraft:seagrass", flags::WATER), Kind::Water);
+    }
+
+    #[test]
     fn classify_follows_the_java_rule() {
         assert_eq!(classify("minecraft:air", flags::AIR), Kind::Air);
         assert_eq!(classify("minecraft:barrier", flags::INVISIBLE), Kind::Air);
@@ -749,7 +857,7 @@ mod tests {
             Kind::Solid
         );
         assert_eq!(
-            classify("minecraft:short_grass", flags::NO_COLLISION),
+            classify("minecraft:torch", flags::NO_COLLISION),
             Kind::Plant
         );
         assert_eq!(classify("minecraft:snow", flags::NO_COLLISION), Kind::Solid);

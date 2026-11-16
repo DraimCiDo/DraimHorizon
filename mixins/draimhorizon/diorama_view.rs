@@ -87,14 +87,6 @@ fn pitch() -> f64 {
     f64::from(PITCH.load(Ordering::Relaxed))
 }
 
-static FULL_SHOWING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static SHOWING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Whether the last minimap frame was the angled view (marks then use its projection).
-pub(super) fn showing() -> bool {
-    SHOWING.load(std::sync::atomic::Ordering::Relaxed)
-}
-
 /// Where a world point lands in the angled minimap's 128 pixel space, for a mark at the player's
 /// height: east is right, south is down by `sin(pitch)`.
 pub(super) fn mark_point(
@@ -108,11 +100,6 @@ pub(super) fn mark_point(
         (64.0 + (world[0] - view_centre[0]) / bpp) as f32,
         (64.0 + (world[1] - view_centre[1]) * sin / bpp) as f32,
     ]
-}
-
-/// Whether the world map's last picture had the angled view laid over it.
-pub(super) fn full_showing() -> bool {
-    FULL_SHOWING.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// [`mark_point`] for the world map: `aspect` wide, any blocks per pixel.
@@ -130,22 +117,8 @@ pub(super) fn mark_point_full(
     ]
 }
 
-/// The world map is showing the flat picture again.
-pub(super) fn reset_full() {
-    FULL_SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
-}
-
-/// Drops the angled picture's state the first time the flat view is shown again.
-pub(super) fn reset_if_showing() {
-    if SHOWING.swap(false, std::sync::atomic::Ordering::Relaxed) {
-        reset();
-    }
-}
-
 /// Forgets everything painted (leaving the world, or the 3D view being switched off).
 pub(super) fn reset() {
-    SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
-    FULL_SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
     state(|s| {
         s.scope.clear();
         s.fed.clear();
@@ -542,7 +515,6 @@ pub(super) fn minimap(
             out
         },
     );
-    SHOWING.store(out.is_some(), std::sync::atomic::Ordering::Relaxed);
     out
 }
 
@@ -568,11 +540,11 @@ fn sharpen(rgba: &mut [u8], size: usize) {
     }
 }
 
-/// Draws the angled view over the world map's picture (`size` x `size`, RGBA, covering
-/// `128 * bpp` blocks tall and `aspect` times that wide around `centre`): every pixel the
-/// mosaic has painted replaces the flat one. Returns whether it drew. Only views the mosaic
-/// can hold are drawn; wider ones stay flat.
-pub(super) fn overlay(
+/// The world map's picture (`size` x `size`, RGBA, covering `128 * bpp` blocks tall and `aspect`
+/// times that wide around `centre`) in the angled view, and the blocks per pixel it really covers:
+/// the mosaic holds about 380 blocks, so a wider view is drawn at that width. What the mosaic has
+/// not painted is a dark chequer. None while the block looks are still being built.
+pub(super) fn full_image(
     game: &Game<'_>,
     scope: &str,
     centre: [f64; 2],
@@ -580,14 +552,11 @@ pub(super) fn overlay(
     bpp: f64,
     aspect: f64,
     size: usize,
-    pixels: &mut [u8],
-) -> bool {
+) -> Option<(Vec<u8>, f64)> {
+    let widest = aspect.max(1.0);
+    let bpp = bpp.min(380.0 / 128.0 / widest).max(0.25);
     let span = 128.0 * bpp;
-    if span * aspect > 380.0 || span > 380.0 || pixels.len() < size * size * 4 {
-        FULL_SHOWING.store(false, std::sync::atomic::Ordering::Relaxed);
-        return false;
-    }
-    let done = with_mosaic(
+    let image = with_mosaic(
         game,
         scope,
         centre,
@@ -595,25 +564,30 @@ pub(super) fn overlay(
         [span * aspect / 2.0, span / 2.0],
         |mosaic, outline, cu, cv| {
             let limit = f64::from(SIDE) - 1.0;
+            let mut pixels = Vec::with_capacity(size * size * 4);
             for py in 0..size {
                 for px in 0..size {
                     let u = cu + ((px as f64 + 0.5) / size as f64 - 0.5) * span * aspect;
                     let v = cv + ((py as f64 + 0.5) / size as f64 - 0.5) * span;
                     let (ti, tj) = mosaic.texel_of(u, v);
-                    if (0.0..=limit).contains(&ti) && (0.0..=limit).contains(&tj) {
-                        let [r, g, b, a] = mosaic.shown_at(ti as u32, tj as u32, outline);
-                        if a != 0 {
-                            let at = (py * size + px) * 4;
-                            pixels[at..at + 4].copy_from_slice(&[r, g, b, 255]);
-                        }
-                    }
+                    let [r, g, b, a] = if (0.0..=limit).contains(&ti) && (0.0..=limit).contains(&tj)
+                    {
+                        mosaic.shown_at(ti as u32, tj as u32, outline)
+                    } else {
+                        [0; 4]
+                    };
+                    pixels.extend(if a == 0 {
+                        let shade = if (px / 16 + py / 16) % 2 == 0 { 20 } else { 23 };
+                        [shade, shade + 5, shade + 10, 255]
+                    } else {
+                        [r, g, b, 255]
+                    });
                 }
             }
+            pixels
         },
-    )
-    .is_some();
-    FULL_SHOWING.store(done, std::sync::atomic::Ordering::Relaxed);
-    done
+    )?;
+    Some((image, bpp))
 }
 
 /// A cheap fingerprint of a read chunk, so an unchanged one is not painted again.

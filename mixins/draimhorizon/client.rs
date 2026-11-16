@@ -286,6 +286,15 @@ fn baritone_off() -> String {
         )
         .into()
 }
+/// Server commands are sent only on Horizon SMP (play.playhorizon.dev), never in single player
+/// or on other servers, where they would raise unknown-command prompts.
+pub(super) fn on_horizon(game: &Game<'_>) -> bool {
+    game.integrated.is_none()
+        && game
+            .remote
+            .as_ref()
+            .is_some_and(|r| claims::is_horizon_smp(&r.session.address))
+}
 pub(super) fn scope(game: &Game<'_>) -> Option<(String, u128)> {
     game.native_player()?;
     if let Some(remote) = &game.remote {
@@ -1224,8 +1233,10 @@ fn party_command(game: &mut Game<'_>, args: &[&str]) -> Result<Vec<String>, Stri
         };
     }
     if action == "sync" && args.len() == 1 {
-        claims::with_state(|s| s.begin_refresh());
-        game.send_unattended_command("claims");
+        if on_horizon(game) {
+            claims::with_state(|s| s.begin_refresh());
+            game.send_unattended_command("claims");
+        }
         state(|c| {
             c.last_claims.clear();
             c.pages.clear();
@@ -2529,10 +2540,10 @@ fn execute_menu(game: &mut Game<'_>, action: menu::Action) -> Result<Vec<String>
             Ok(Vec::new())
         }
         Action::RefreshClaims => {
-            if game.remote.is_none() {
+            if !on_horizon(game) {
                 return Err(tr!(
-                    "Обновление приватных территорий доступно на сервере.",
-                    "Claims can only be refreshed on a server."
+                    "Обновление приватов доступно только на Horizon SMP (play.playhorizon.dev).",
+                    "Claims can only be refreshed on Horizon SMP (play.playhorizon.dev)."
                 ));
             }
             claims::with_state(|s| s.begin_refresh());

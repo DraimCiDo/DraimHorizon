@@ -597,7 +597,7 @@ fn window_token(game: &Game<'_>) -> String {
     )
 }
 pub(super) fn frame(game: &mut Game<'_>) {
-    if !game.native_on(claims::ID) || game.remote.is_none() {
+    if !game.native_on(claims::ID) || !client::on_horizon(game) {
         suspend();
         return;
     }

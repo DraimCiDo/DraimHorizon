@@ -371,18 +371,18 @@ mod tests {
     }
 
     #[test]
-    fn plants_and_glass_are_seen_through() {
+    fn hidden_plants_leave_no_overlay_and_glass_is_seen_through() {
         let p = painter();
-        // A poppy on grass at 64: the top drops to the grass, tinted red.
+        // A hidden poppy on grass at 64: neither height nor colour changes.
         let mut c = column(&[4, 1], 65);
         p.prepare(&mut c);
         assert_eq!(c.tops[0], 64);
         assert_eq!(c.state(0, 0), 1);
         let o = c.over_at(0);
-        assert!((o[3] - 0.6).abs() < 1e-6);
+        assert_eq!(o[3], 1.0);
         let grass = p.top(&column(&[1], 64), 0, 65.0).rgb;
         let under_poppy = p.top(&c, 0, 65.0).rgb;
-        assert!(channels(under_poppy)[0] > channels(grass)[0]);
+        assert_eq!(under_poppy, grass);
         // Glass over air over stone: the stone, a quarter glass.
         let mut g = column(&[5, 0, 0, 2], 70);
         p.prepare(&mut g);

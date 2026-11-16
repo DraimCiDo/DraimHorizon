@@ -1,6 +1,6 @@
 [mod]
 id = "draimhorizon"
-version = "0.40.8"
+version = "0.40.9"
 priority = 100
 
 # Additional visible models only: server metadata and effects remain untouched.
@@ -1367,6 +1367,12 @@ id = "diorama-view"
 file = "crates/horizon-client/src/game.rs"
 name = "claim_borders_diorama_view"
 source = "diorama_view.rs"
+
+[[module]]
+id = "diorama-map"
+file = "crates/horizon-client/src/game/extras.rs"
+name = "claim_borders_diorama_map"
+source = "diorama_map.rs"
 
 # Diorama minimap core (MIT), see diorama/NOTICE.md.
 [[module]]

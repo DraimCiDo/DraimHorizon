@@ -340,11 +340,7 @@ pub(super) fn map_marks(
     full: bool,
     aspect: f32,
 ) {
-    let angled = if full {
-        crate::game::claim_borders_diorama_view::full_showing()
-    } else {
-        crate::game::claim_borders_diorama_view::showing()
-    };
+    let angled = p.view3d;
     let xy = |world| {
         let point = if angled && full {
             crate::game::claim_borders_diorama_view::mark_point_full(
