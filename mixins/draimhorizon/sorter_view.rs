@@ -778,15 +778,32 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
 /// and what was meant for it is planned again.
 fn give_up(game: &mut Game<'_>, mut run: Run) {
     close_window(game);
+    // What the aim met instead of the container, to tell the player why.
+    let met = placement::container_hit();
+    let why = if met.is_empty() {
+        String::new()
+    } else {
+        format!(" ({} {met})", text("прицел попал в", "the aim met"))
+    };
     match run.goal {
         Goal::Input(_) => end(
             game,
-            Some(text(
-                "Сортировка: не могу открыть входной сундук.",
-                "Sorter: cannot open the input container.",
+            Some(&format!(
+                "{} {}{why}",
+                text(
+                    "Сортировка: не могу открыть входной сундук",
+                    "Sorter: cannot open the input container"
+                ),
+                fmt(run.target)
             )),
         ),
         Goal::Put => {
+            let line = format!(
+                "{} {}{why}",
+                text("Сортировка: пропускаю сундук", "Sorter: skipping container"),
+                fmt(run.target)
+            );
+            game.native_chat(&format!("[DraimHorizon] {line}"));
             run.skip.insert(run.target);
             plan_round(game, &mut run);
             match next_target(game, run) {

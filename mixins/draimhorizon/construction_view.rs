@@ -1061,6 +1061,7 @@ pub(super) fn open_container(pos: nav::Pos) {
     state(|s| {
         s.interact = Some(pos);
         s.interact_miss = 0;
+        s.interact_hit.clear();
     });
 }
 /// Whether the container to open has been out of sight from here for a while (crops, a wall or
@@ -1077,22 +1078,6 @@ fn interact_input(game: &mut Game<'_>) -> Option<bool> {
     let pos = state(|s| s.interact)?;
     if !game.native_playing() || navigation::mouse_has_camera() {
         return Some(false);
-    }
-    // The head turns to the block over a few ticks first, as a person's does; the exact aim at
-    // its middle and sides follows once it points at it.
-    if let Some(eye) = game.eye_position() {
-        let middle = [
-            f64::from(pos[0]) + 0.5,
-            f64::from(pos[1]) + 0.5,
-            f64::from(pos[2]) + 0.5,
-        ];
-        let (yaw, pitch) = (nav::yaw_to(eye, middle), nav::pitch_to(eye, middle));
-        if nav::angle_between(game.yaw, yaw).abs() > 6.0 || (game.pitch - pitch).abs() > 6.0 {
-            note_aim();
-            game.yaw = nav::turn_toward(game.yaw, yaw, 30.0);
-            game.pitch = nav::turn_toward(game.pitch, pitch, 24.0);
-            return None;
-        }
     }
     // Where the block really is first (a door's panel stands at one side of its cell, a gate's
     // bar across its middle), then the middle, the top and the four sides: a chest behind a bed
@@ -1132,7 +1117,7 @@ fn interact_input(game: &mut Game<'_>) -> Option<bool> {
         }
     };
     let low = top * 0.5;
-    for [x, y, z] in [
+    let points: Vec<[f64; 3]> = [
         shape,
         [0.5, 0.5, 0.5],
         [0.5, 0.9, 0.5],
@@ -1157,25 +1142,51 @@ fn interact_input(game: &mut Game<'_>) -> Option<bool> {
         [0.93, 0.06, 0.07],
         [0.07, 0.06, 0.93],
         [0.93, 0.06, 0.93],
-    ] {
-        let point = [
+    ]
+    .into_iter()
+    .map(|[x, y, z]| {
+        [
             f64::from(pos[0]) + x,
             f64::from(pos[1]) + y,
             f64::from(pos[2]) + z,
-        ];
-        aim(game, point);
-        // The other half of a double chest is the same container. An item frame on it in the
-        // way would take the click instead (turning its item, or taking the held one).
+        ]
+    })
+    .collect();
+    // An item frame in the way would take the click instead (turning its item, or taking the
+    // held one): only points with a clear line are clicked.
+    let clear: Vec<[f64; 3]> = points
+        .iter()
+        .copied()
+        .filter(|p| !frame_in_way(game, *p))
+        .collect();
+    let first = clear.first().or(points.first()).copied()?;
+    // The head comes round to the first point quickly (a big turn over a few ticks, as a
+    // person's does); near it the exact aims take over. Turning back to the block's middle
+    // every tick, with the last aim ending on a corner, swung the head to and fro and left a
+    // click only every other tick.
+    if let Some(eye) = game.eye_position() {
+        let (yaw, pitch) = (nav::yaw_to(eye, first), nav::pitch_to(eye, first));
+        if nav::angle_between(game.yaw, yaw).abs() > 25.0 || (game.pitch - pitch).abs() > 25.0 {
+            note_aim();
+            game.yaw = nav::turn_toward(game.yaw, yaw, 45.0);
+            game.pitch = nav::turn_toward(game.pitch, pitch, 36.0);
+            return None;
+        }
+    }
+    for point in &clear {
+        aim(game, *point);
+        // The other half of a double chest is the same container.
         if game
             .pick()
             .is_some_and(|h| h.pos == pos || same_chest(game, h.pos, pos))
-            && !frame_in_way(game, point)
         {
             state(|s| s.interact = None);
             return Some(true);
         }
     }
-    // The aim is as it was after the last try: what it points at, to say why nothing opened.
+    // Nothing met it: the head stays on the first point (it does not jump to the last one
+    // tried), and what the aim meets there says why nothing opened.
+    aim(game, first);
     let hit = game.pick().map_or_else(
         || "nothing".to_owned(),
         |h| {
@@ -1190,6 +1201,11 @@ fn interact_input(game: &mut Game<'_>) -> Option<bool> {
             )
         },
     );
+    let hit = if clear.is_empty() {
+        format!("item_frame ({hit})")
+    } else {
+        hit
+    };
     state(|s| {
         s.interact_miss += 1;
         s.interact_hit = hit;

@@ -1,5 +1,11 @@
 # История версий
 
+## 0.44.3
+
+- Container clicks aim quickly and steadily, whatever the Human look setting: the head turns to the first clickable point of the container at 45° a tick and the exact aims follow there. Before, every tick compared the aim with the container's middle while the previous tick's tries ended on a corner, so the head swung between the two, a click was tried only every other tick and after about a second the container counted as out of reach. This broke the sorter's trips (and slowed the farm's and mining's container trips).
+- When nothing is hit, the head stays on the container instead of jumping to the last point tried.
+- The sorter says in the chat which container it skips or cannot open and what the aim met instead.
+
 ## 0.44.2
 
 - Sorter: double chests open from either half. The sorter walked to and aimed at one fixed half and only counted a hit on that half, so from the other side the click never registered: it turned its head for seconds, gave up on the container (the overflow one too) and carried everything back into the input. It now walks to the nearer half and clicks the half in sight, and a container click counts on either half (the farm and mining trips benefit too).
