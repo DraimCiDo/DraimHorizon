@@ -706,7 +706,7 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
         if within_reach(game, run.target) {
             run.step = Step::Open;
             run.since = Instant::now();
-            placement::open_container(click_half(game, run.target));
+            open_target(game, run.target);
             save_run(game, run);
             return;
         }
@@ -746,6 +746,7 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
         run.limit = haul::walk_time(game, spot);
         save_run(game, run);
     } else if run.since.elapsed() > run.limit {
+        crate::game::claim_borders_baritone_bridge::walk_cancel();
         run.walking = false;
         run.tries += 1;
         if run.tries >= 4 {
@@ -758,7 +759,7 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
             Some(true) => {
                 run.step = Step::Open;
                 run.since = Instant::now();
-                placement::open_container(click_half(game, run.target));
+                open_target(game, run.target);
                 save_run(game, run);
             }
             Some(false) => {
@@ -773,6 +774,12 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
             None => save_run(game, run),
         }
     }
+}
+/// Starts the click that opens the target. A walk still under way (one given up on by its time
+/// limit) is stopped first: it would keep moving the player and turning the head.
+fn open_target(game: &Game<'_>, target: sorter::Pos) {
+    crate::game::claim_borders_baritone_bridge::walk_cancel();
+    placement::open_container(click_half(game, target));
 }
 /// The target could not be reached or opened: an input ends the run, a container is skipped
 /// and what was meant for it is planned again.
@@ -1229,6 +1236,13 @@ fn status_of(s: &State) -> String {
     let Some(run) = s.run.as_ref() else {
         return s.message.clone();
     };
+    if matches!(run.step, Step::Open) && walk::mouse_has_camera() {
+        return text(
+            "Сортировка: жду, камера у вас (мышь)",
+            "Sorter: waiting, you have the camera (mouse)",
+        )
+        .to_owned();
+    }
     match (run.step, run.goal) {
         (Step::Wait(_), _) => text(
             "Сортировка: жду новых вещей",

@@ -1873,8 +1873,10 @@ pub(super) fn mining_attack(game: &mut Game<'_>, physical: bool) -> bool {
         // starts once it points at it.
         let (yaw, pitch) = (model::yaw_to(eye, center), model::pitch_to(eye, center));
         if model::angle_between(game.yaw, yaw).abs() > 4.0 || (game.pitch - pitch).abs() > 4.0 {
-            game.yaw = model::turn_toward(game.yaw, yaw, 45.0);
-            game.pitch = model::turn_toward(game.pitch, pitch, 36.0);
+            let (look, _) =
+                model::head_step([game.yaw, game.pitch], [yaw, pitch], model::CLICK_TURN);
+            game.yaw = look[0];
+            game.pitch = look[1];
             // This turn is the miner's own, not the player moving the camera (which pauses).
             s.mine_aim = Some([game.yaw, game.pitch]);
             return false;
@@ -3903,17 +3905,29 @@ fn face(game: &mut Game<'_>) {
     let t = since.elapsed().as_secs_f32() + START.get_or_init(Instant::now).elapsed().as_secs_f32();
     let sway_yaw = 1.2 * (t * 1.7).sin();
     game.yaw = model::turn_toward(game.yaw, yaw + sway_yaw, TURN_STEP);
-    // The pitch follows slowly (a few degrees a tick): no nodding.
-    game.pitch = model::turn_toward(game.pitch, pitch, 3.0);
+    // The pitch follows more gently than the yaw (no nodding), but not at a crawl.
+    game.pitch = model::turn_toward(game.pitch, pitch, 10.0);
 }
 /// When the player last turned the camera themselves (mouse or controller), from the game's
 /// own look input: a turn made by a task is never taken for one.
 static PLAYER_LOOK: Mutex<Option<Instant>> = Mutex::new(None);
 /// How long the camera stays the player's after the mouse last moved.
 const MOUSE_LEND: Duration = Duration::from_secs(3);
-/// The look hook: the player turned the camera.
-pub(super) fn player_looked() {
-    *PLAYER_LOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+/// The mouse movement of the last moment: when it began and how far it went, in pixels.
+static LOOK_MOTION: Mutex<Option<(Instant, f64)>> = Mutex::new(None);
+/// The look hook: the player turned the camera (a real move takes it from the tasks).
+pub(super) fn player_looked(x: f64, y: f64) {
+    let mut motion = LOOK_MOTION.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    let run = motion.map(|(since, total)| (now.duration_since(since).as_millis() as u64, total));
+    let ((elapsed, total), taken) = model::look_motion(run, x.abs() + y.abs());
+    let since = now
+        .checked_sub(Duration::from_millis(elapsed))
+        .unwrap_or(now);
+    *motion = Some((since, total));
+    if taken {
+        *PLAYER_LOOK.lock().unwrap_or_else(|e| e.into_inner()) = Some(now);
+    }
 }
 /// Whether the player moved the mouse within the last three seconds: every task leaves the
 /// camera alone then (it waits to aim, it never pauses for it) and walks with the keys only.

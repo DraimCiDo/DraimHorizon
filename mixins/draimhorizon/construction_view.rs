@@ -1165,13 +1165,15 @@ fn interact_input(game: &mut Game<'_>) -> Option<bool> {
     // every tick, with the last aim ending on a corner, swung the head to and fro and left a
     // click only every other tick.
     if let Some(eye) = game.eye_position() {
-        let (yaw, pitch) = (nav::yaw_to(eye, first), nav::pitch_to(eye, first));
-        if nav::angle_between(game.yaw, yaw).abs() > 25.0 || (game.pitch - pitch).abs() > 25.0 {
-            note_aim();
-            game.yaw = nav::turn_toward(game.yaw, yaw, 45.0);
-            game.pitch = nav::turn_toward(game.pitch, pitch, 36.0);
+        let wanted = [nav::yaw_to(eye, first), nav::pitch_to(eye, first)];
+        let (look, there) = nav::head_step([game.yaw, game.pitch], wanted, nav::CLICK_TURN);
+        note_aim();
+        game.yaw = look[0];
+        game.pitch = look[1];
+        if !there {
             return None;
         }
+        // There this tick: the click is tried at once.
     }
     for point in &clear {
         aim(game, *point);
@@ -1456,8 +1458,9 @@ pub(super) fn input(game: &mut Game<'_>) -> bool {
         // (going back to the middle every tick made the head spin).
         if nav::angle_between(game.yaw, yaw).abs() > 35.0 || (game.pitch - pitch).abs() > 35.0 {
             note_aim();
-            game.yaw = nav::turn_toward(game.yaw, yaw, 30.0);
-            game.pitch = nav::turn_toward(game.pitch, pitch, 24.0);
+            let (look, _) = nav::head_step([game.yaw, game.pitch], [yaw, pitch], nav::CLICK_TURN);
+            game.yaw = look[0];
+            game.pitch = look[1];
             let turned = [game.yaw, game.pitch];
             state(|s| s.aim = Some(turned));
             return false;

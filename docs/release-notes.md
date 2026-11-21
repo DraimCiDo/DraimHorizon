@@ -1,10 +1,11 @@
-# DraimHorizon 0.44.3
+# DraimHorizon 0.44.4
 
-Fixes for the storage sorter (and every container trip):
+**Fast head turns for every automation click.** Opening a chest, placing a block, breaking a shulker box or aiming at an ore now turns the head straight to the target at 60° a tick (a half turn in about 0.15 s) and clicks in the same tick it arrives, whatever the Human look setting.
 
-- **Fast, steady aim at containers.** The head now turns straight to a clickable point of the chest at 45° a tick and clicks there, whether Human look is on or off. Before, it swung between the chest's middle and a corner, tried a click only every other tick and gave up on the chest after about a second, which is why the sorter could not reach its chests.
-- **Clear messages.** When the sorter skips a container or cannot open the input, the chat says which one and what the aim met instead.
+- A hand resting on the mouse no longer pauses the aim: only a real mouse move (12 pixels within 0.4 s) takes the camera. Before, a single stray pixel stopped every task from aiming for three seconds.
+- With Human look on, the head's up/down movement while walking is three times faster.
+- The sorter stops a stuck walk before trying again and never aims while a walk is still moving the player; its status says when it waits for you to let go of the camera.
 
-From 0.44.2: double chests open from either side, clicks never go through item frames, no false "full" after one stack, clicks every 100 ms, and **Watch** keeps a single input open and sorts new items at once.
+Earlier fixes in 0.44.2 and 0.44.3: double chests open from either side, clicks never go through item frames, no false "full", non-stop **Watch**, and messages naming any container the sorter skips.
 
 The Horizon package targets the official Nightly `8f83e5c`; the Sunrise package targets Nightly `9425651`.

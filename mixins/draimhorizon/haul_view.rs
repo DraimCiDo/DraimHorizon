@@ -440,8 +440,10 @@ pub(super) fn frame(game: &mut Game<'_>) {
                     let middle = nav::center(t.chest);
                     let middle = [middle[0], middle[1] + 0.5, middle[2]];
                     let (yaw, pitch) = (nav::yaw_to(eye, middle), nav::pitch_to(eye, middle));
-                    game.yaw = nav::turn_toward(game.yaw, yaw, 30.0);
-                    game.pitch = nav::turn_toward(game.pitch, pitch, 24.0);
+                    let (look, _) =
+                        nav::head_step([game.yaw, game.pitch], [yaw, pitch], nav::CLICK_TURN);
+                    game.yaw = look[0];
+                    game.pitch = look[1];
                     let aimed = nav::angle_between(game.yaw, yaw).abs() < 4.0
                         && (game.pitch - pitch).abs() < 4.0
                         && game.pick().is_some_and(|h| h.pos == t.chest);

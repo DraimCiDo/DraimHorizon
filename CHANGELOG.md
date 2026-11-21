@@ -1,5 +1,12 @@
 # История версий
 
+## 0.44.4
+
+- Head turning rewritten for every click on a block (opening containers, placing, breaking a shulker box, the miner's aim): one controller (`navigation::head_step`) turns straight on at 60° a tick in yaw and 45° in pitch and lands exactly, so a half turn takes three ticks, and the click is tried in the tick the head arrives. The old easing crawled the last degrees and needed an extra tick before each click.
+- A resting hand on the mouse no longer stops the tasks' aim: the player takes the camera only by moving the mouse 12 pixels within 0.4 s. Before, every stray pixel lent the camera to the player for three seconds, during which no container could be opened.
+- With Human look on, the walking pitch follows at 10° a tick instead of 3°.
+- Sorter: a walk given up on by its time limit is stopped before the next try, and any walk is stopped before a container is clicked (the port kept moving the player and the view while the sorter aimed). The status line says when it waits because the player has the camera.
+
 ## 0.44.3
 
 - Container clicks aim quickly and steadily, whatever the Human look setting: the head turns to the first clickable point of the container at 45° a tick and the exact aims follow there. Before, every tick compared the aim with the container's middle while the previous tick's tries ended on a corner, so the head swung between the two, a click was tried only every other tick and after about a second the container counted as out of reach. This broke the sorter's trips (and slowed the farm's and mining's container trips).

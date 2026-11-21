@@ -1368,6 +1368,47 @@ pub fn turn_toward(current: f32, wanted: f32, max_step: f32) -> f32 {
     let step = (left * 0.4).abs().clamp(left.abs().min(1.5), max_step);
     current + step.copysign(left)
 }
+/// One tick of a quick head turn toward a block to click: straight on at `speed` degrees a tick
+/// (yaw, pitch), the last stretch in one go, so the head is there in a few ticks and never
+/// crawls the final degrees. Returns the new (yaw, pitch) and whether it points at `wanted`.
+pub fn head_step(current: [f32; 2], wanted: [f32; 2], speed: [f32; 2]) -> ([f32; 2], bool) {
+    let yaw_left = angle_between(current[0], wanted[0]);
+    let pitch_left = wanted[1] - current[1];
+    let yaw = if yaw_left.abs() <= speed[0] {
+        current[0] + yaw_left
+    } else {
+        current[0] + speed[0].copysign(yaw_left)
+    };
+    let pitch = if pitch_left.abs() <= speed[1] {
+        wanted[1]
+    } else {
+        current[1] + speed[1].copysign(pitch_left)
+    }
+    .clamp(-90.0, 90.0);
+    let there = yaw_left.abs() <= speed[0] && pitch_left.abs() <= speed[1];
+    ([yaw, pitch], there)
+}
+/// How fast a head turns to a block it is about to click, in degrees a tick (yaw, pitch).
+pub const CLICK_TURN: [f32; 2] = [60.0, 45.0];
+/// The player takes the camera from a task only with a real move of the mouse: this many
+/// pixels within `LOOK_WINDOW_MS`. A hand resting on the mouse, or a sensor's tremor, sends a
+/// pixel now and then.
+pub const LOOK_TAKEOVER_PX: f64 = 12.0;
+pub const LOOK_WINDOW_MS: u64 = 400;
+/// Adds a mouse movement of `moved` pixels to the run of movements (`ms_since_start`
+/// milliseconds after it began, `total` pixels so far; `None` for no run). The new run, and
+/// whether the player has taken the camera.
+pub fn look_motion(run: Option<(u64, f64)>, moved: f64) -> ((u64, f64), bool) {
+    let total = match run {
+        Some((elapsed, total)) if elapsed < LOOK_WINDOW_MS => total + moved,
+        _ => moved,
+    };
+    let fresh = run.is_none_or(|(elapsed, _)| elapsed >= LOOK_WINDOW_MS);
+    (
+        (if fresh { 0 } else { run.map_or(0, |r| r.0) }, total),
+        total >= LOOK_TAKEOVER_PX,
+    )
+}
 pub fn block(position: [f64; 3]) -> Pos {
     position.map(|x| x.floor() as i32)
 }
@@ -2501,6 +2542,34 @@ mod tests {
         }
         assert!((yaw - 120.0).abs() < 1e-3);
         assert!(steps[0] <= 25.0 + 1e-4 && steps[0] > steps[8]);
+        // A click turn goes straight at its speed and lands exactly, the short way round.
+        let mut look = [170.0_f32, 0.0];
+        let mut ticks = 0;
+        loop {
+            let (next, there) = head_step(look, [-10.0, 40.0], CLICK_TURN);
+            look = next;
+            ticks += 1;
+            if there {
+                break;
+            }
+        }
+        assert_eq!(ticks, 3, "180 degrees in three ticks");
+        assert!(angle_between(look[0], -10.0).abs() < 1e-3 && (look[1] - 40.0).abs() < 1e-3);
+        let (same, there) = head_step([5.0, 5.0], [5.5, 4.0], CLICK_TURN);
+        assert!(there && (same[0] - 5.5).abs() < 1e-4 && (same[1] - 4.0).abs() < 1e-4);
+        let (down, _) = head_step([0.0, 80.0], [0.0, 95.0], CLICK_TURN);
+        assert!(down[1] <= 90.0);
+        // A pixel of tremor now and then never takes the camera; a real move does.
+        let mut run = None;
+        for _ in 0..20 {
+            let (next, taken) = look_motion(run.map(|(_, t)| (LOOK_WINDOW_MS + 1, t)), 1.0);
+            assert!(!taken);
+            run = Some(next);
+        }
+        let (run, taken) = look_motion(None, 5.0);
+        assert!(!taken);
+        let (_, taken) = look_motion(Some((100, run.1)), 8.0);
+        assert!(taken, "13 pixels within the window");
         // The look point is a few blocks ahead on a straight route.
         let path = search([0, 0, 0], [10, 0, 0], flat, || false).unwrap();
         let mut n = Navigator::default();
