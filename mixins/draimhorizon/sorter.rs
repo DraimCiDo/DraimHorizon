@@ -53,6 +53,28 @@ pub fn canonical(at: Pos, partner: Option<Pos>) -> Pos {
     partner.map_or(at, |p| p.min(at))
 }
 
+/// Whether the segment from `from` to `to` passes through the box `lo`..`hi` (an item frame in
+/// the way of a click: the click would go to it).
+pub fn segment_hits_box(from: [f64; 3], to: [f64; 3], lo: [f64; 3], hi: [f64; 3]) -> bool {
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for i in 0..3 {
+        let d = to[i] - from[i];
+        if d.abs() < 1e-9 {
+            if from[i] < lo[i] || from[i] > hi[i] {
+                return false;
+            }
+            continue;
+        }
+        let (a, b) = ((lo[i] - from[i]) / d, (hi[i] - from[i]) / d);
+        t0 = t0.max(a.min(b));
+        t1 = t1.min(a.max(b));
+        if t0 > t1 {
+            return false;
+        }
+    }
+    true
+}
+
 /// The storage zone: a box marked by two corners, corners included.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Zone {
@@ -707,6 +729,34 @@ mod tests {
         assert_eq!(back, all);
         let bad = "w\tzone\t0\t0\t0\t500\t0\t0\nw\tinput\t1\tx\t3\nw\tnope\t1\t2\t3";
         assert!(decode_places(bad).is_empty());
+    }
+
+    #[test]
+    fn a_frame_on_the_chest_face_blocks_its_middle_but_not_its_rim() {
+        // A frame on the north face of the chest at 0 64 0 (it hangs in the block north of it):
+        // 12/16 wide and tall, 1/16 thick, against the chest.
+        let (lo, hi) = ([0.125, 64.125, -0.0625], [0.875, 64.875, 0.0]);
+        let eye = [0.5, 65.12, -2.5];
+        assert!(segment_hits_box(eye, [0.5, 64.5, 0.5], lo, hi));
+        // A point deep in the block behind the face's rim is still seen through the frame.
+        assert!(segment_hits_box(eye, [0.09, 64.5, 0.5], lo, hi));
+        // The vertical edges of the chest are clear of it from straight ahead; seen aslant, the
+        // near edge is (the far one is behind the frame, and the aim tries the next point).
+        for to in [[0.07, 64.5, 0.07], [0.93, 64.5, 0.07], [0.07, 64.06, 0.07]] {
+            assert!(!segment_hits_box(eye, to, lo, hi), "{to:?}");
+        }
+        let aslant = [-1.0, 65.1, -2.0];
+        assert!(!segment_hits_box(aslant, [0.07, 64.5, 0.07], lo, hi));
+        assert!(segment_hits_box(aslant, [0.93, 64.5, 0.07], lo, hi));
+        // From the side the face's frame is not in the way.
+        assert!(!segment_hits_box(
+            [3.0, 65.1, 0.5],
+            [0.5, 64.5, 0.5],
+            lo,
+            hi
+        ));
+        // A segment that stops short of the box does not reach it.
+        assert!(!segment_hits_box(eye, [0.5, 64.5, -1.0], lo, hi));
     }
 
     #[test]

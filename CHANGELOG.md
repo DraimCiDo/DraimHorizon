@@ -1,5 +1,12 @@
 # История версий
 
+## 0.44.2
+
+- Sorter: double chests open from either half. The sorter walked to and aimed at one fixed half and only counted a hit on that half, so from the other side the click never registered: it turned its head for seconds, gave up on the container (the overflow one too) and carried everything back into the input. It now walks to the nearer half and clicks the half in sight, and a container click counts on either half (the farm and mining trips benefit too).
+- Container clicks no longer go through an item frame: the aim skips points whose line from the eye crosses a frame's box (the click would turn its item or put the held item in) and tries the chest's vertical edges beside the frame.
+- Sorter: the player's slots are read from the open window itself, and a container counts as full only when nothing has moved for 1.5 s. A slow answer had made the first chest look full after one stack.
+- Sorter: faster clicks (a round every 100 ms), and **Watch** keeps a single input open and takes what arrives at once instead of coming back every 30 seconds; several inputs are gone round every 5 seconds.
+
 ## 0.44.1
 
 - Updated the Horizon `.hmod` to the official Nightly `8f83e5c`. This Nightly split `remote/mod.rs` into thin wrappers whose bodies live in submodules, so the Baritone chunk-unload hook (`bar-unload`, before `Streaming::take_remote_columns`) now targets `remote::level_state::forget_remote_columns_body`. The other hook targets are unchanged.

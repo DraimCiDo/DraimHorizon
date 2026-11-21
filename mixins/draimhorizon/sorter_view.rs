@@ -2,7 +2,7 @@
 // or more input containers and an optional overflow container (aimed at). Started, it walks to an
 // input, takes what has a place, carries it round the containers meant for it (item frames
 // first, then what each was seen holding, then the overflow) and comes back until the input
-// holds nothing more it can place; "watch" looks at the inputs again every half minute. The
+// holds nothing more it can place; "watch" never stops (one input stays open). The
 // item frames around the player and the containers of the zone are indexed as it goes (a few
 // thousand blocks a tick) and kept per world, so a large storage does not have to be opened
 // again on every round. Only what was taken out of an input is carried off: the player's own
@@ -26,10 +26,15 @@ const SCAN_PER_TICK: i64 = 1024;
 /// Frames are read this close to the player only (well inside the entity tracking range), so a
 /// container whose frame is out of range does not lose its label.
 const FRAME_RANGE: f64 = 24.0;
-/// How often "watch" looks at the inputs again.
-const WATCH_EVERY: Duration = Duration::from_secs(30);
+/// How often "watch" goes round several inputs again (one input is kept open instead).
+const WATCH_EVERY: Duration = Duration::from_secs(5);
 /// A click round every this often (the server may run slowly).
-const CLICK_EVERY: Duration = Duration::from_millis(160);
+const CLICK_EVERY: Duration = Duration::from_millis(100);
+/// Stacks shift-clicked per round.
+const CLICKS_PER_ROUND: usize = 4;
+/// The window is given this long to show a click's result before the plan counts as stuck
+/// (a slow server answers late).
+const STALL: Duration = Duration::from_millis(1500);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
@@ -74,8 +79,9 @@ struct Run {
     limit: Duration,
     tries: u8,
     last: Instant,
-    stuck: u8,
+    /// The plan's signature, and when it last changed: a plan that stays the same is stuck.
     sig: usize,
+    changed: Instant,
 }
 struct State {
     loaded: bool,
@@ -209,20 +215,38 @@ fn window_open(game: &Game<'_>) -> bool {
             .is_some_and(crate::game::claim_borders_farm_storage::is_container_menu)
 }
 /// The open window's own slots (not the player's 36).
-fn window_slots(game: &mut Game<'_>) -> Vec<sorter::Stack> {
-    let mut out = Vec::new();
+/// The open window's own slots and the player's 36 (by game slot: 0..9 the hotbar), both read
+/// from the window itself so they agree with the clicks just predicted on it.
+fn window_slots(game: &mut Game<'_>) -> (Vec<sorter::Stack>, Vec<sorter::Stack>) {
+    let mut own = Vec::new();
+    let mut player: Vec<sorter::Stack> = vec![None; 36];
     game.menu_session(|menu, _env, _to_menu| {
         let n = menu.slot_count();
-        for i in 0..n.saturating_sub(36) {
-            out.push(
-                menu.slot(i)
-                    .filter(|st| st.count > 0)
-                    .map(|st| (st.item.to_string(), st.count)),
-            );
+        let read = |i: usize| {
+            menu.slot(i)
+                .filter(|st| st.count > 0)
+                .map(|st| (st.item.to_string(), st.count))
+        };
+        let main = n.saturating_sub(36);
+        for i in 0..main {
+            own.push(read(i));
+        }
+        // A chest menu's player rows: the 27 of the main inventory, then the hotbar.
+        for k in 0..36.min(n - main) {
+            player[if k < 27 { 9 + k } else { k - 27 }] = read(main + k);
         }
         Some(false)
     });
-    out
+    (own, player)
+}
+/// Whether the plan with signature `sig` has stayed the same for `STALL` (nothing moves).
+fn stalled(run: &mut Run, sig: usize) -> bool {
+    if sig != run.sig {
+        run.sig = sig;
+        run.changed = Instant::now();
+        return false;
+    }
+    run.changed.elapsed() >= STALL
 }
 
 // ---- Indexing: item frames and the containers of the zone ----
@@ -345,8 +369,8 @@ fn new_run(mode: Mode, scope: String, keep: BTreeMap<String, u32>) -> Run {
         limit: Duration::from_secs(90),
         tries: 0,
         last: Instant::now(),
-        stuck: 0,
-        sig: 0,
+        sig: usize::MAX,
+        changed: Instant::now(),
     }
 }
 fn start(game: &Game<'_>, mode: Mode) -> Result<String, String> {
@@ -458,21 +482,56 @@ fn save_run(game: &Game<'_>, run: Run) {
         }
     });
 }
-/// Whether the container can be clicked from where the player stands.
+/// Both halves of a double chest (the known one first), or the one block.
+fn halves(game: &Game<'_>, target: sorter::Pos) -> Vec<sorter::Pos> {
+    let mut out = vec![target];
+    if sorter::joins(&game.native_block(target))
+        && let Some(other) = sorter::partner(
+            target,
+            game.native_block_property(target, "type").as_deref(),
+            game.native_block_property(target, "facing").as_deref(),
+        )
+    {
+        out.push(other);
+    }
+    out
+}
+fn eye_distance(eye: [f64; 3], at: sorter::Pos) -> f64 {
+    let middle = nav::center(at);
+    nav::distance(eye, [middle[0], middle[1] + 0.5, middle[2]])
+}
+/// The half to click: the nearest one in sight from where the player stands, else the nearest.
+/// Aiming at the far half from the near half's side meets the near one, which is the same
+/// container, but the line to the far half counts as blocked.
+fn click_half(game: &Game<'_>, target: sorter::Pos) -> sorter::Pos {
+    let (Some(eye), Some(p)) = (game.eye_position(), game.native_player()) else {
+        return target;
+    };
+    let feet = nav::block([p.x, p.y, p.z]);
+    let mut all = halves(game, target);
+    all.sort_by(|a, b| {
+        let key = |at: &sorter::Pos| (!haul::in_sight(game, feet, *at), eye_distance(eye, *at));
+        key(a)
+            .partial_cmp(&key(b))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    all[0]
+}
+/// Whether the container (either half of it) can be clicked from where the player stands.
 fn within_reach(game: &Game<'_>, target: sorter::Pos) -> bool {
     let (Some(eye), Some(feet)) = (game.eye_position(), game.native_player()) else {
         return false;
     };
-    let middle = nav::center(target);
-    nav::distance(eye, [middle[0], middle[1] + 0.5, middle[2]]) <= 4.0
-        && haul::in_sight(game, nav::block([feet.x, feet.y, feet.z]), target)
+    let feet = nav::block([feet.x, feet.y, feet.z]);
+    halves(game, target)
+        .into_iter()
+        .any(|at| eye_distance(eye, at) <= 4.2 && haul::in_sight(game, feet, at))
 }
 /// The next container to go to after the current one, or back to the input.
 fn next_target(game: &Game<'_>, mut run: Run) -> Option<Run> {
     run.walking = false;
     run.tries = 0;
-    run.stuck = 0;
-    run.sig = 0;
+    run.sig = usize::MAX;
     run.step = Step::Walk;
     if !run.queue.is_empty() {
         run.target = run.queue.remove(0);
@@ -603,6 +662,8 @@ pub(super) fn frame(game: &mut Game<'_>) {
         Step::Open => {
             if window_open(game) {
                 run.step = Step::Work;
+                run.tries = 0;
+                run.sig = usize::MAX;
                 run.last = Instant::now() - CLICK_EVERY;
                 save_run(game, run);
             } else if placement::container_blocked()
@@ -645,7 +706,7 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
         if within_reach(game, run.target) {
             run.step = Step::Open;
             run.since = Instant::now();
-            placement::open_container(run.target);
+            placement::open_container(click_half(game, run.target));
             save_run(game, run);
             return;
         }
@@ -653,7 +714,22 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
             save_run(game, run);
             return;
         };
-        let spots = haul::spots(game, run.target, [p.x, p.y, p.z]);
+        // Spots beside either half, the nearest half's first.
+        let from = [p.x, p.y, p.z];
+        let mut sides = halves(game, run.target);
+        sides.sort_by(|a, b| {
+            nav::distance(nav::center(*a), from)
+                .partial_cmp(&nav::distance(nav::center(*b), from))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let mut spots: Vec<nav::Pos> = Vec::new();
+        for side in sides {
+            for spot in haul::spots(game, side, from) {
+                if !spots.contains(&spot) {
+                    spots.push(spot);
+                }
+            }
+        }
         let Some(spot) = spots
             .get(usize::from(run.tries) % spots.len().max(1))
             .copied()
@@ -682,7 +758,7 @@ fn walk_step(game: &mut Game<'_>, mut run: Run) {
             Some(true) => {
                 run.step = Step::Open;
                 run.since = Instant::now();
-                placement::open_container(run.target);
+                placement::open_container(click_half(game, run.target));
                 save_run(game, run);
             }
             Some(false) => {
@@ -730,8 +806,7 @@ fn give_up(game: &mut Game<'_>, mut run: Run) {
 /// One round of clicks in the open window.
 fn work(game: &mut Game<'_>, mut run: Run) {
     use horizon_client::menu::Input;
-    let slots = window_slots(game);
-    let inv = haul::inventory(game);
+    let (slots, inv) = window_slots(game);
     if !matches!(run.goal, Goal::Input(_)) {
         with(game, |s| {
             sorter::observe(&mut s.chests, &run.scope, run.target, &slots);
@@ -754,8 +829,8 @@ fn work(game: &mut Game<'_>, mut run: Run) {
             let items = run.assign.get(&run.target).cloned().unwrap_or_default();
             let plan = sorter::put_slots(&inv, &items, &run.keep);
             let sig = plan.iter().sum::<usize>() + plan.len() * 100;
-            let stuck = if sig == run.sig { run.stuck + 1 } else { 0 };
-            if plan.is_empty() || stuck >= 3 {
+            let stuck = stalled(&mut run, sig);
+            if plan.is_empty() || stuck {
                 close_window(game);
                 if !plan.is_empty() {
                     // Nothing moves: it is full. Plan what is left again without it.
@@ -776,16 +851,12 @@ fn work(game: &mut Game<'_>, mut run: Run) {
             }
             let ops: Vec<_> = plan
                 .iter()
-                .take(4)
+                .take(CLICKS_PER_ROUND)
                 .map(|g| (Some(*g), 0, Input::QuickMove))
                 .collect();
-            if !game.menu_ops(&ops) {
-                run.stuck = stuck + 1;
-            } else {
+            if game.menu_ops(&ops) {
                 with(game, |s| s.moved = s.moved.saturating_add(ops.len() as u32));
-                run.stuck = stuck;
             }
-            run.sig = sig;
             run.last = Instant::now();
             save_run(game, run);
         }
@@ -827,8 +898,21 @@ fn work(game: &mut Game<'_>, mut run: Run) {
             };
             let sig =
                 putback.iter().chain(&take).sum::<usize>() + (putback.len() + take.len()) * 100;
-            let stuck = if sig == run.sig { run.stuck + 1 } else { 0 };
-            if (putback.is_empty() && take.is_empty()) || stuck >= 3 {
+            let stuck = stalled(&mut run, sig);
+            let carrying = !sorter::carried(&inv, &run.keep).is_empty();
+            if putback.is_empty()
+                && take.is_empty()
+                && !carrying
+                && run.mode == Mode::Watch
+                && inputs(game, &run.scope).len() == 1
+            {
+                // Watching one input: its window stays open, and what comes into it is taken
+                // as soon as the server shows it.
+                run.last = Instant::now();
+                save_run(game, run);
+                return;
+            }
+            if (putback.is_empty() && take.is_empty()) || stuck {
                 close_window(game);
                 if !putback.is_empty() {
                     end(
@@ -865,8 +949,7 @@ fn work(game: &mut Game<'_>, mut run: Run) {
                         run.step = Step::Walk;
                         run.walking = false;
                         run.tries = 0;
-                        run.stuck = 0;
-                        run.sig = 0;
+                        run.sig = usize::MAX;
                         save_run(game, run);
                     } else if run.mode == Mode::Watch {
                         run.step = Step::Wait(Instant::now() + WATCH_EVERY);
@@ -886,13 +969,11 @@ fn work(game: &mut Game<'_>, mut run: Run) {
                 .iter()
                 .map(|g| (Some(*g), 0, Input::QuickMove))
                 .chain(take.iter().map(|i| (Some(300 + *i), 0, Input::QuickMove)))
-                .take(4)
+                .take(CLICKS_PER_ROUND)
                 .collect();
             if game.menu_ops(&ops) {
                 with(game, |s| s.moved = s.moved.saturating_add(ops.len() as u32));
             }
-            run.stuck = stuck;
-            run.sig = sig;
             run.last = Instant::now();
             save_run(game, run);
         }

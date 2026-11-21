@@ -1050,7 +1050,7 @@ pub enum SorterControl {
     Pos2,
     /// Empty the inputs once.
     Sort,
-    /// Empty the inputs, then look again every half minute.
+    /// Empty the inputs and keep watching them: one input stays open, several are gone round.
     Watch,
     /// Open every container not seen yet, to learn what it holds.
     Survey,

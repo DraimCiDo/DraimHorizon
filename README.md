@@ -93,7 +93,7 @@ Every Baritone job shares one route planner. A task waits instead of stopping wh
 3. The overflow container, if one is set.
 4. With **Empty ones** on, the nearest empty unframed container.
 
-Anything else stays in the input. Mark the storage zone with **Corner 1** and **Corner 2** at its opposite corners (up to 128×128 blocks and 24 levels). Aim at a container and press **Input** (up to four) or **Overflow**. **Sort now** empties the inputs once. **Watch** checks them again every 30 seconds. **Survey** opens every container it has not seen yet, to learn its contents. The same actions are available as `/dsort pos1|pos2|input|overflow|start|watch|survey|stop|empty|status|clear`.
+Anything else stays in the input. Mark the storage zone with **Corner 1** and **Corner 2** at its opposite corners (up to 128×128 blocks and 24 levels). Aim at a container and press **Input** (up to four) or **Overflow**. **Sort now** empties the inputs once. **Watch** never stops: it keeps a single input open and sorts new items as soon as they arrive (several inputs are checked every 5 seconds). **Survey** opens every container it has not seen yet, to learn its contents. The same actions are available as `/dsort pos1|pos2|input|overflow|start|watch|survey|stop|empty|status|clear`.
 
 While you are near the storage, the sorter indexes its containers and the item frames within 24 blocks and saves them per world. A large storage therefore does not need reopening each round. Only items taken from an input are carried off; items already in your inventory stay there. Full containers are skipped, and items with nowhere to go are returned to the input.
 

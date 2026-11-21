@@ -1,14 +1,10 @@
-# DraimHorizon 0.44.1
+# DraimHorizon 0.44.2
 
-## Storage sorter
+Fixes from the first tests of the storage sorter:
 
-Automation gets a third mode, **Sorting** (also `/dsort`). It works like a copper golem for a whole storage room:
+- **Double chests open from either side.** The sorter used to aim at one fixed half of a double chest and gave up when the other half was in the way, so it turned its head for seconds, skipped containers (the overflow one too) and put everything back into the input. It now walks to the nearer half and clicks the half in sight; a click on either half counts. The farm and mining trips use the same fix.
+- **No more clicks into item frames.** A container click whose line passes through an item frame is not made (it would turn the frame's item or put the held item in); the aim uses the chest's edges beside the frame instead.
+- **No false "full".** The sorter reads your slots from the open window and only treats a container as full when nothing has moved for 1.5 seconds, so it no longer leaves after one stack.
+- **Faster and non-stop.** Clicks come every 100 ms. **Watch** keeps a single input open and sorts new items the moment they arrive; with several inputs it goes round them every 5 seconds.
 
-- Mark the storage zone with **Corner 1** / **Corner 2** (up to 128×128 blocks, 24 levels), aim at an input container and press **Input** (up to four), and optionally set an **Overflow** container.
-- Each item goes to the container whose **item frame** shows it; otherwise to an unframed container already holding it, then to the overflow, and with **Empty ones** on to an empty unframed container. Anything else stays in the input.
-- **Sort now** empties the inputs once, **Watch** checks them every 30 seconds, **Survey** opens containers not seen yet to learn what they hold.
-- Frames and containers are indexed while you are near the storage and saved per world, so a large storage is not reopened every round. Only items taken from an input are carried; your own inventory stays put.
-
-Copper chests now count as containers for the sorter, the farm and mining trips.
-
-The Horizon package now targets the official Nightly `8f83e5c`; the Sunrise package targets Nightly `9425651`.
+The Horizon package targets the official Nightly `8f83e5c`; the Sunrise package targets Nightly `9425651`.

@@ -1147,16 +1147,30 @@ fn interact_input(game: &mut Game<'_>) -> Option<bool> {
         [0.25, low, 0.75],
         [0.75, low, 0.25],
         [0.5, top * 0.9, 0.5],
+        // The vertical edges, beside an item frame on either face they join (a frame covers
+        // the middle 12/16 of a face; the chest's body reaches 1/16 from the block's side).
+        [0.07, 0.5, 0.07],
+        [0.93, 0.5, 0.07],
+        [0.07, 0.5, 0.93],
+        [0.93, 0.5, 0.93],
+        [0.07, 0.06, 0.07],
+        [0.93, 0.06, 0.07],
+        [0.07, 0.06, 0.93],
+        [0.93, 0.06, 0.93],
     ] {
-        aim(
-            game,
-            [
-                f64::from(pos[0]) + x,
-                f64::from(pos[1]) + y,
-                f64::from(pos[2]) + z,
-            ],
-        );
-        if game.pick().is_some_and(|h| h.pos == pos) {
+        let point = [
+            f64::from(pos[0]) + x,
+            f64::from(pos[1]) + y,
+            f64::from(pos[2]) + z,
+        ];
+        aim(game, point);
+        // The other half of a double chest is the same container. An item frame on it in the
+        // way would take the click instead (turning its item, or taking the held one).
+        if game
+            .pick()
+            .is_some_and(|h| h.pos == pos || same_chest(game, h.pos, pos))
+            && !frame_in_way(game, point)
+        {
             state(|s| s.interact = None);
             return Some(true);
         }
@@ -1181,6 +1195,26 @@ fn interact_input(game: &mut Game<'_>) -> Option<bool> {
         s.interact_hit = hit;
     });
     None
+}
+/// Whether `a` and `b` are the two halves of one double chest.
+fn same_chest(game: &Game<'_>, a: nav::Pos, b: nav::Pos) -> bool {
+    use crate::game::claim_borders_sorter as sorter;
+    sorter::joins(&game.native_block(a))
+        && sorter::partner(
+            a,
+            game.native_block_property(a, "type").as_deref(),
+            game.native_block_property(a, "facing").as_deref(),
+        ) == Some(b)
+}
+/// Whether an item frame's box lies on the line from the eye to `point`.
+fn frame_in_way(game: &Game<'_>, point: [f64; 3]) -> bool {
+    let Some(eye) = game.eye_position() else {
+        return false;
+    };
+    game.item_frames.iter().any(|f| {
+        let (lo, hi) = f.bounds();
+        crate::game::claim_borders_sorter::segment_hits_box(eye, point, lo, hi)
+    })
 }
 /// What the aim at the container met instead of it the last time it failed.
 pub(super) fn container_hit() -> String {
