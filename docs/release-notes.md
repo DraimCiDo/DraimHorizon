@@ -1,1 +1,3 @@
-- Fixed native compatibility checks for both clients. The Horizon visibility overlay uses the current renderer signature, and Sunrise staging uses Cargo's build-script output directory and inlines the generated host module.
+**DraimHorizon 0.44.6 - Agent disclosure line for pull requests and issues (unreleased)**
+
+Maintenance: agent instructions now require a fixed disclosure line at the top of agent-opened pull requests and issues. No user-facing changes.

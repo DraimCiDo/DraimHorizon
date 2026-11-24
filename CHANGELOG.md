@@ -1,5 +1,9 @@
 # История версий
 
+## 0.44.6
+
+- Maintenance: agent instructions (`CLAUDE.md`, `AGENTS.md`) now require pull requests and issues opened by an agent to start with `> 🤖 Opened by DraimCiDo's agent swarm, <agent>, not by DraimCiDo.`, in place of host-generated attribution footers.
+
 ## 0.44.5
 
 - Fixed native compatibility checks for both clients. The Horizon visibility overlay uses the current renderer signature, and Sunrise staging uses Cargo's build-script output directory and inlines the generated host module.
