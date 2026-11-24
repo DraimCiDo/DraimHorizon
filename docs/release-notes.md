@@ -1,3 +1,4 @@
+- Sunrise is supported; its CI workflow no longer carries the experimental label.
 - Releases temporarily contain only the Sunrise `.smod` and its SHA-256 checksum while the horizon-rust repositories are unavailable.
 - Sunrise pin checks and SDK validation remain required before publication. Runtime, tool and relay tests remain enabled.
 - Horizon checks and both source-stage builds are paused until upstream recovery; source staging also depends on horizon-rust/horizon-mixins. Existing Horizon releases and compatibility pins are preserved.

@@ -24,7 +24,7 @@ Target clients are the official Horizon Nightly `0a875da` and the Sunrise Dev bu
 | Client | Status | Pinned official Nightly | How it is checked |
 | --- | --- | --- | --- |
 | Horizon | Checks and new `.hmod` releases are temporarily paused while horizon-rust is unavailable. Previous releases remain available. | `f1bb66f` (`horizon_revision`) | SDK validation and source staging will resume after upstream recovery. |
-| Sunrise | Experimental. Install the release's `.smod`. | Dev build `3d34bbe` (`sunrise.revision`), until a Nightly as new is published | SDK validation uses `python tools/sunrise.py smod-check --fetch` and remains required before release. Source staging is temporarily paused because it depends on horizon-rust/horizon-mixins. |
+| Sunrise | Supported. Install the release's `.smod`. | Dev build `3d34bbe` (`sunrise.revision`), until a Nightly as new is published | SDK validation uses `python tools/sunrise.py smod-check --fetch` and remains required before release. Source staging is temporarily paused because it depends on horizon-rust/horizon-mixins. |
 
 Both pins live in `compatibility.json`. During the horizon-rust outage, CI checks only Sunrise every day
 (`python tools/compatibility.py --sunrise-only --strict-sunrise`). Releases contain only `.smod` and its SHA-256
