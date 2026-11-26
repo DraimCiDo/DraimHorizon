@@ -16,7 +16,8 @@ struct State {
     scope: String,
     queue: model::Queue,
     worker: Option<Translator>,
-    parts: VecDeque<String>,
+    /// Lines waiting to be sent, and whether each is a command (a whisper) rather than chat.
+    parts: VecDeque<(String, bool)>,
     clock: Option<Instant>,
     last: u64,
 }
@@ -80,15 +81,29 @@ pub(super) fn intercept(game: &mut Game<'_>, text: &str) -> bool {
         return false;
     }
     let text = horizon_client::chat::normalize_chat_message(text);
-    if text.is_empty() || text.starts_with('/') || !game.chat_abilities().allows(&text) {
+    if text.is_empty() || !game.chat_abilities().allows(&text) {
         return false;
     }
+    // Commands go to the game untouched, except the text of a private message. A reply is
+    // bound to its recipient now, before translation delays it.
+    let (prefix, body) = if text.starts_with('/') {
+        let Some((prefix, body)) = model::whisper(&text) else {
+            return false;
+        };
+        let last = crate::game::claim_borders_chat_view::last_whisper_sender();
+        match model::bind_reply(prefix, last.as_deref()) {
+            Some(prefix) => (prefix, body),
+            None => return false,
+        }
+    } else {
+        (String::new(), text.as_str())
+    };
     let ui_language = crate::game::claim_borders_chat_view::language(game);
     let prefs = targets(game);
     let translate = enabled(game)
         && prefs
             .outgoing
-            .should_translate(prefs.policy(true).source, &text);
+            .should_translate(prefs.policy(true).source, body);
     let current = scope(game).unwrap();
     let result = state(|s| {
         if s.scope != current {
@@ -105,7 +120,10 @@ pub(super) fn intercept(game: &mut Game<'_>, text: &str) -> bool {
             .get_or_insert_with(Instant::now)
             .elapsed()
             .as_millis() as u64;
-        let id = match s.queue.push_in(&text, now, translate, ui_language) {
+        let id = match s
+            .queue
+            .push_after(&prefix, body, now, translate, ui_language)
+        {
             Ok(id) => id,
             Err(e) => return Some(Err(e)),
         };
@@ -121,7 +139,7 @@ pub(super) fn intercept(game: &mut Game<'_>, text: &str) -> bool {
                 })
                 .submit_until(
                     id,
-                    &text,
+                    body,
                     Instant::now() + Duration::from_millis(model::WAIT_MS - 500),
                 )
         {
@@ -230,10 +248,18 @@ pub(super) fn frame(game: &mut Game<'_>) {
         }
         let mut failure = false;
         if s.parts.is_empty()
-            && let Some((text, failed)) = s.queue.pop(now)
+            && let Some((prefix, text, failed)) = s.queue.pop(now)
         {
-            s.parts.extend(model::split(&text));
-            failure = failed;
+            let command = !prefix.is_empty();
+            // `whisper` only accepts prefixes that leave room, so None is not expected here.
+            let lines = model::split_after(&prefix, &text);
+            failure = failed || lines.is_none();
+            s.parts.extend(
+                lines
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|line| (line, command)),
+            );
         }
         if now.saturating_sub(s.last) < 1000 {
             return (None, failure);
@@ -248,10 +274,17 @@ pub(super) fn frame(game: &mut Game<'_>) {
     if failure {
         *failed_at().lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
     }
-    if let Some(message) = message
-        && game.chat_abilities().send_messages
-    {
-        game.send_signed_chat(&message);
+    match message {
+        // A whisper: the command and recipient as typed, then the (translated) text.
+        Some((message, true)) if game.chat_abilities().send_commands => {
+            if let Err(error) = game.native_send_chat(&message) {
+                game.native_chat(&format!("[DraimHorizons] {error}"));
+            }
+        }
+        Some((message, false)) if game.chat_abilities().send_messages => {
+            game.send_signed_chat(&message);
+        }
+        _ => {}
     }
 }
 /// When the translation service last failed, so the button can say so for a while.

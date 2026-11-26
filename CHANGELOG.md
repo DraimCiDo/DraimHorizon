@@ -1,5 +1,25 @@
 # История версий
 
+## 0.46.0
+
+- Private messages are translated when outgoing translation is on. In `/msg`, `/tell`, `/w` and `/whisper` (followed by a player name), and in `/r` and `/reply`, only the message text goes to the translator; the command and recipient are sent exactly as typed. Long translations are split so that every line, prefix included, fits the 256-character limit, and a failed translation sends the original whisper. A translated `/r` or `/reply` is sent as `/msg` to whoever whispered last when Enter was pressed, so a whisper arriving during translation cannot redirect it. Other commands still go to the game untouched.
+- Polish chat is now detected in automatic mode. Polish typed without diacritics (`siema co tam`, `gdzie jest baza`) used to look like unidentified ASCII and was skipped as English, so it was never translated; it is now recognised by common words and by Polish-only letters, also after an English greeting. Finnish, Dutch, Swedish, Danish, Czech and Turkish gained the same word lists (and letter markers for Czech and Turkish), which also fixes their source badges.
+- Added regression tests for whisper parsing, prefixed splitting and the new language detection, including English lines that must still be left alone.
+
+## 0.45.3
+
+- Обновлён пакет для Sunrise до DEV `ba1f24e` (`dev-2026-11-26-ba1f24e`, Java 26.3). Хеш `crates/sunrise-client/src/net.rs` не изменился, но две используемые модом API — да, поэтому адаптеры обновлены.
+- В этой сборке динамические текстуры стали отдельными GPU-текстурами: `HudAtlas` больше не хранит их таблицу и `dynamic_names()`. Карта мира, Seed Map и миникарта создаются и обновляются через `Game.dynamic_textures` и рисуются `HudBatch::dynamic_texture`, а пиксели Seed Map теперь идут прямо в текстуру, без патча атласа. Раньше отрисовка шла через атлас, из-за чего миникарта показывала отсутствующую текстуру, а карты — только метки.
+- `SystemToast::update` получил параметр `ToastClock`: общий вызов для Horizon остаётся прежним, а правило `[[rewrite]]` в `platforms/sunrise/platform.toml` передаёт `ToastClock::Real`, сохраняя отсчёт по реальному времени.
+- После обновления клиента до этой Dev-сборки установите новый `.smod` и пересоберите нативные моды: нативная сборка работает ровно с одной версией игры.
+- Проверки Horizon и выпуск `.hmod` остаются приостановленными, пока репозитории horizon-rust недоступны.
+
+## 0.45.2
+
+- Обновлён пакет для Sunrise до DEV `6a02076` (`dev-2026-11-25-6a02076`, Java 26.3). Закреплённый хеш `crates/sunrise-client/src/net.rs` не изменился, поэтому адаптеры и цели хуков править не потребовалось: все 69 инъекций находятся в новом дереве, а подготовленный клиент Sunrise компилируется с внедрённым модом.
+- После обновления клиента до этой Dev-сборки установите новый `.smod` и пересоберите нативные моды: нативная сборка работает ровно с одной версией игры.
+- Проверки Horizon и выпуск `.hmod` остаются приостановленными, пока репозитории horizon-rust недоступны.
+
 ## 0.45.1
 
 - Fixed the game freezing right after joining play.playhorizon.dev on Sunrise. The automatic background `/claims` refresh sent its command while holding the claims-reply lock; Sunrise passes the mod's own unattended commands back through the mod's command hook, which took the same lock again and blocked the game thread forever. The refresh now decides under the lock, sends unlocked and records the result afterwards.

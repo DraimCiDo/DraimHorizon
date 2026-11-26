@@ -1,8 +1,8 @@
 // World map / Seed Map / minimap images as client dynamic textures in the GUI atlas pool.
 // Game-side module (private Game fields reachable). Replaces the dropped HudAtlas::slots hook:
-// the images are created lazily under the names the shared code looks up in
-// the GUI atlas's live texture table, and `DynamicTextures::update` keeps
-// the last image so an atlas rebuild (resource reload / renderer rebuild) re-patches it.
+// the images are created lazily under the ids the shared code looks up in the HUD atlas, and
+// `DynamicTextures::update` keeps the last image so an atlas rebuild (resource reload / renderer
+// rebuild) re-patches it.
 //
 // The 2026-11-19 Nightly also removed the engine minimap (its drawing, sprite slot and terrain
 // scanner), so the live minimap is a third image here: `claim_borders_map_backend` composes the
@@ -44,17 +44,16 @@ fn warn(what: &str, error: impl std::fmt::Debug) {
 /// Create a transparent dynamic texture for each image that is missing.
 pub fn ensure(game: &mut Game<'_>) {
     for (name, side) in IMAGES {
-        if game.gui.atlas.live.contains_key(name) {
-            continue;
-        }
         let Ok(id) = Identifier::parse(name) else {
             continue;
         };
+        if game.dynamic_textures.get(&id).is_some() {
+            continue;
+        }
         let rgba = vec![0u8; side as usize * side as usize * 4];
-        let (pool, mut names) = game.gui.atlas.dynamic_names();
-        if let Err(error) =
-            game.dynamic_textures
-                .create(pool, &mut names, Some(OWNER), &id, [side, side], &rgba)
+        if let Err(error) = game
+            .dynamic_textures
+            .create(OWNER, &id, [side, side], &rgba)
         {
             warn("create", error);
         }
@@ -74,11 +73,7 @@ pub fn upload(game: &mut Game<'_>, name: &str, rgba: &[u8]) -> bool {
     let Ok(id) = Identifier::parse(name) else {
         return false;
     };
-    let (pool, mut names) = game.gui.atlas.dynamic_names();
-    match game
-        .dynamic_textures
-        .update(pool, &mut names, Some(OWNER), &id, [side, side], rgba)
-    {
+    match game.dynamic_textures.update(OWNER, &id, [side, side], rgba) {
         Ok(()) => {
             if name == MINIMAP {
                 MINIMAP_UPLOADED.store(true, Ordering::Relaxed);
@@ -98,6 +93,34 @@ pub fn has_minimap() -> bool {
     MINIMAP_UPLOADED.load(Ordering::Relaxed)
 }
 
+/// Whether dynamic image `name` exists and can be drawn.
+pub fn ready(game: &Game<'_>, name: &str) -> bool {
+    Identifier::parse(name)
+        .ok()
+        .and_then(|id| game.dynamic_textures.get(&id))
+        .is_some()
+}
+
+/// Draw dynamic image `name` across `at` `[x, y, w, h]`, the whole texture, tinted `tint`.
+/// Dynamic textures are standalone GPU textures, not GUI atlas sprites: `rect_uv` with an atlas
+/// rect cannot sample them.
+pub fn draw_quad(
+    game: &Game<'_>,
+    batch: &mut sunrise_client::hud::HudBatch,
+    name: &str,
+    [x, y, w, h]: [f32; 4],
+    tint: u32,
+) {
+    let Ok(id) = Identifier::parse(name) else {
+        return;
+    };
+    let Some((handle, size)) = game.dynamic_textures.get(&id) else {
+        return;
+    };
+    let side = [size[0] as i32, size[1] as i32];
+    batch.dynamic_texture(handle, size, [x, y, w, h], [0.0, 0.0], [side, side], tint);
+}
+
 /// Draw the live minimap image at `[x, y, size]`; the shared HUD pass draws its marks and frame on
 /// top of it.
 pub fn draw_minimap(
@@ -108,5 +131,5 @@ pub fn draw_minimap(
     if !has_minimap() {
         return;
     }
-    batch.sprite_scaled(&game.gui.atlas, MINIMAP, x, y, size, size, u32::MAX);
+    draw_quad(game, batch, MINIMAP, [x, y, size, size], u32::MAX);
 }
